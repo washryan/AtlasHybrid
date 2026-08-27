@@ -12,6 +12,11 @@ allprojects {
     group = 'dev.atlashybrid'
     version = rootProject.ext.atlasVersion
 
+    tasks.withType(org.gradle.api.tasks.bundling.AbstractArchiveTask).configureEach {
+        preserveFileTimestamps = false
+        reproducibleFileOrder = true
+    }
+
     repositories {
         mavenCentral()
         maven { url = 'https://maven.minecraftforge.net' }
@@ -38,6 +43,31 @@ subprojects {
                 events 'failed', 'skipped'
                 exceptionFormat 'full'
             }
+        }
+    }
+}
+
+gradle.projectsEvaluated {
+    subprojects.each { targetProject ->
+        def reobfTask = targetProject.tasks.findByName('reobfJar')
+        if (reobfTask != null) {
+            def jarTask = targetProject.tasks.named('jar', Jar)
+
+            // ForgeGradle rewrites its jar after the Jar task, including ZIP timestamps.
+            def normalizeReobfuscatedJar = targetProject.tasks.register('normalizeReobfuscatedJar', Zip) {
+                archiveFileName.set(jarTask.flatMap { it.archiveFileName })
+                destinationDirectory.set(targetProject.layout.buildDirectory.dir('reproducible-archives'))
+                from { targetProject.zipTree(jarTask.get().archiveFile.get().asFile) }
+
+                doLast {
+                    targetProject.copy {
+                        from archiveFile
+                        into jarTask.get().destinationDirectory
+                    }
+                }
+            }
+
+            reobfTask.finalizedBy normalizeReobfuscatedJar
         }
     }
 }

@@ -48,11 +48,13 @@ Os avisos iniciais sobre jars internos de linguagem sem `mods.toml` são emitido
 
 ## Artefatos finais
 
+Os archives são configurados para saída reproduzível, sem timestamps por entrada e com ordem determinística. Dois builds limpos em 27 de agosto de 2026 produziram os mesmos bytes e hashes, inclusive após `reobfJar`.
+
 | Artefato | SHA-256 |
 |---|---|
-| `platform-forge-1.19.2/build/libs/atlashybrid-1.19.2-0.1.0-alpha.jar` | `461FCDB5D68BC6B64F4AE724726777A7F92EDF300FDF7B8EB1731B732A12A275` |
-| `test-plugin/build/libs/AtlasHybridTestPlugin-0.1.0-alpha.jar` | `51CE3183ABD38AFF67EBD182708D1809D66F3AE2E5620688492E83C154D75FF7` |
-| `test-mod/build/libs/atlashybrid-test-mod-1.19.2-0.1.0-alpha.jar` | `09565580D1F555DB706BD4A09D852797A23442E50FA38ABF01A156C18818E42B` |
+| `platform-forge-1.19.2/build/libs/atlashybrid-1.19.2-0.1.0-alpha.jar` | `C331435C8608B893E9420259BC73FC4CAD24C169CFAF5FBA55B67DC7DBDF1DFA` |
+| `test-plugin/build/libs/AtlasHybridTestPlugin-0.1.0-alpha.jar` | `E6AF4B180295B0938E854C475E662E1C41888ECA22A015ABDE2701307356F761` |
+| `test-mod/build/libs/atlashybrid-test-mod-1.19.2-0.1.0-alpha.jar` | `DFBBB6CF13D0E25F2117C7F7CA1394D31B277B7ED09018C1580FD6833EE33C69` |
 
 ## Correções realizadas durante a prova
 
