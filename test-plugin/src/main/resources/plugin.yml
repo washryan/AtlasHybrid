@@ -1,0 +1,11 @@
+name: AtlasHybridTestPlugin
+version: 0.1.0-alpha
+main: dev.atlashybrid.testplugin.AtlasHybridTestPlugin
+api-version: '1.19'
+description: Functional acceptance plugin for AtlasHybrid.
+authors: [AtlasHybrid]
+depend: []
+softdepend: []
+commands:
+  atlas:
+    description: Shows AtlasHybrid status.

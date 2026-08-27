@@ -1,0 +1,108 @@
+package dev.atlashybrid.runtime;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import dev.atlashybrid.runtime.command.CommandRegistry;
+import dev.atlashybrid.runtime.event.AtlasPluginManager;
+import dev.atlashybrid.runtime.scheduler.AtlasScheduler;
+import java.io.File;
+import java.util.List;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.logging.Logger;
+import org.bukkit.Server;
+import org.bukkit.block.Block;
+import org.bukkit.command.CommandSender;
+import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.entity.Player;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.Listener;
+import org.bukkit.event.block.BlockBreakEvent;
+import org.bukkit.plugin.Plugin;
+import org.bukkit.plugin.PluginDescriptionFile;
+import org.junit.jupiter.api.Test;
+
+class RuntimeCoreTest {
+    @Test
+    void commandBridgeDispatchesArgumentsAndResponse() {
+        CommandRegistry registry = new CommandRegistry();
+        FakePlugin plugin = new FakePlugin();
+        var command = registry.register("atlas", plugin);
+        AtomicInteger calls = new AtomicInteger();
+        command.setExecutor((sender, ignored, label, args) -> { calls.incrementAndGet(); sender.sendMessage(label + ":" + args[0]); return true; });
+        FakeSender sender = new FakeSender();
+        assertTrue(registry.dispatch("ATLAS", sender, new String[] { "info" }));
+        assertEquals(1, calls.get());
+        assertEquals("atlas:info", sender.message);
+    }
+
+    @Test
+    void eventDispatchPropagatesCancellation() {
+        AtlasPluginManager manager = new AtlasPluginManager(Logger.getAnonymousLogger());
+        FakePlugin plugin = new FakePlugin();
+        manager.addPlugin(plugin);
+        manager.registerEvents(new CancelListener(), plugin);
+        BlockBreakEvent event = new BlockBreakEvent(new FakeBlock(), new FakePlayer());
+        manager.callEvent(event);
+        assertTrue(event.isCancelled());
+    }
+
+    @Test
+    void schedulerRunsOnDueTickAndCancelsOwnedTasks() {
+        AtlasScheduler scheduler = new AtlasScheduler(Logger.getAnonymousLogger());
+        FakePlugin plugin = new FakePlugin();
+        AtomicInteger calls = new AtomicInteger();
+        scheduler.runTaskLater(plugin, calls::incrementAndGet, 2);
+        scheduler.tick();
+        assertEquals(0, calls.get());
+        scheduler.tick();
+        assertEquals(1, calls.get());
+        scheduler.runTask(plugin, calls::incrementAndGet);
+        scheduler.cancelTasks(plugin);
+        scheduler.tick();
+        assertEquals(1, calls.get());
+    }
+
+    private static final class CancelListener implements Listener {
+        @EventHandler public void onBreak(BlockBreakEvent event) { event.setCancelled(true); }
+    }
+
+    private static final class FakePlugin implements Plugin {
+        private final PluginDescriptionFile description = new PluginDescriptionFile("Test", "1", "example.Test", null, null, List.of(), List.of(), List.of(), Set.of());
+        @Override public String getName() { return "Test"; }
+        @Override public PluginDescriptionFile getDescription() { return description; }
+        @Override public Server getServer() { return null; }
+        @Override public Logger getLogger() { return Logger.getAnonymousLogger(); }
+        @Override public File getDataFolder() { return new File("."); }
+        @Override public FileConfiguration getConfig() { return null; }
+        @Override public void reloadConfig() { }
+        @Override public void saveDefaultConfig() { }
+        @Override public boolean isEnabled() { return true; }
+        @Override public void onLoad() { }
+        @Override public void onEnable() { }
+        @Override public void onDisable() { }
+    }
+
+    private static class FakeSender implements CommandSender {
+        String message;
+        @Override public String getName() { return "sender"; }
+        @Override public void sendMessage(String message) { this.message = message; }
+        @Override public boolean isOp() { return true; }
+        @Override public boolean hasPermission(String permission) { return true; }
+    }
+
+    private static final class FakePlayer extends FakeSender implements Player {
+        @Override public UUID getUniqueId() { return UUID.fromString("00000000-0000-0000-0000-000000000001"); }
+        @Override public String getDisplayName() { return getName(); }
+    }
+
+    private static final class FakeBlock implements Block {
+        @Override public int getX() { return 1; }
+        @Override public int getY() { return 2; }
+        @Override public int getZ() { return 3; }
+        @Override public String getType() { return "minecraft:stone"; }
+    }
+}

@@ -1,0 +1,10 @@
+plugins { id 'java' }
+
+dependencies {
+    compileOnly project(':bukkit-api')
+}
+
+jar {
+    archiveBaseName = 'AtlasHybridTestPlugin'
+    manifest { attributes('Implementation-Version': project.version) }
+}

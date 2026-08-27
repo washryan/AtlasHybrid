@@ -1,0 +1,119 @@
+buildscript {
+    repositories {
+        maven { url = 'https://maven.minecraftforge.net' }
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'net.minecraftforge.gradle:ForgeGradle:5.1.+'
+    }
+}
+
+apply plugin: 'net.minecraftforge.gradle'
+
+evaluationDependsOn(':bukkit-api')
+evaluationDependsOn(':runtime-core')
+evaluationDependsOn(':plugin-loader')
+evaluationDependsOn(':diagnostics')
+evaluationDependsOn(':test-mod')
+
+java { toolchain.languageVersion = JavaLanguageVersion.of(17) }
+
+def manualServerRequested = gradle.startParameter.taskNames.any {
+    it == 'runManualServer' || it.endsWith(':runManualServer')
+}
+
+minecraft {
+    mappings channel: 'official', version: rootProject.ext.minecraftVersion
+    runs {
+        server {
+            workingDirectory project.file(manualServerRequested ? '../run-manual' : '../run')
+            forceExit false
+            property 'forge.logging.console.level', 'info'
+            property 'terminal.ansi', 'true'
+            mods {
+                atlashybrid {
+                    source sourceSets.main
+                    source project(':bukkit-api').sourceSets.main
+                    source project(':runtime-core').sourceSets.main
+                    source project(':plugin-loader').sourceSets.main
+                    source project(':diagnostics').sourceSets.main
+                }
+                if (!manualServerRequested) {
+                    atlashybrid_test_mod {
+                        source project(':test-mod').sourceSets.main
+                    }
+                }
+            }
+        }
+    }
+}
+
+def manualRunDirectory = rootProject.file('run-manual')
+def manualServerProperties = project.file('manual/server.properties')
+
+tasks.register('prepareManualServer') {
+    group = 'atlashybrid'
+    description = 'Prepares the isolated manual server without accepting the Minecraft EULA.'
+    dependsOn ':test-plugin:jar'
+
+    inputs.file(manualServerProperties)
+    inputs.file(project(':test-plugin').tasks.named('jar').flatMap { it.archiveFile })
+    outputs.dir(manualRunDirectory)
+
+    doLast {
+        ['plugins', 'mods', 'config', 'logs', 'world'].each {
+            new File(manualRunDirectory, it).mkdirs()
+        }
+
+        copy {
+            from project(':test-plugin').tasks.named('jar').flatMap { it.archiveFile }
+            into new File(manualRunDirectory, 'plugins')
+        }
+
+        File targetProperties = new File(manualRunDirectory, 'server.properties')
+        if (!targetProperties.exists()) {
+            copy {
+                from manualServerProperties
+                into manualRunDirectory
+            }
+        }
+    }
+}
+
+tasks.register('runManualServer') {
+    group = 'atlashybrid'
+    description = 'Runs the continuous manual Forge server without AtlasHybridTestMod.'
+    dependsOn 'runServer'
+}
+
+tasks.matching { manualServerRequested && it.name == 'runServer' }.configureEach {
+    dependsOn tasks.named('prepareManualServer')
+    standardInput = System.in
+}
+
+dependencies {
+    minecraft "net.minecraftforge:forge:${rootProject.ext.minecraftVersion}-${rootProject.ext.forgeVersion}"
+    implementation project(':bukkit-api')
+    implementation project(':runtime-core')
+    implementation project(':plugin-loader')
+    implementation project(':diagnostics')
+}
+
+jar {
+    archiveBaseName = 'atlashybrid-1.19.2'
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    from project(':bukkit-api').sourceSets.main.output
+    from project(':runtime-core').sourceSets.main.output
+    from project(':plugin-loader').sourceSets.main.output
+    from project(':diagnostics').sourceSets.main.output
+    manifest {
+        attributes(
+            'Specification-Title': 'AtlasHybrid',
+            'Specification-Version': project.version,
+            'Implementation-Title': 'AtlasHybrid',
+            'Implementation-Version': project.version,
+            'Implementation-Timestamp': new Date().format("yyyy-MM-dd'T'HH:mm:ssZ")
+        )
+    }
+    finalizedBy 'reobfJar'
+}

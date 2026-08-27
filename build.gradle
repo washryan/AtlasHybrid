@@ -1,0 +1,49 @@
+plugins {
+    id 'base'
+}
+
+ext {
+    atlasVersion = '0.1.0-alpha'
+    minecraftVersion = '1.19.2'
+    forgeVersion = '43.5.0'
+}
+
+allprojects {
+    group = 'dev.atlashybrid'
+    version = rootProject.ext.atlasVersion
+
+    repositories {
+        mavenCentral()
+        maven { url = 'https://maven.minecraftforge.net' }
+    }
+}
+
+subprojects {
+    plugins.withId('java') {
+        java {
+            toolchain {
+                languageVersion = JavaLanguageVersion.of(17)
+            }
+        }
+
+        tasks.withType(JavaCompile).configureEach {
+            options.encoding = 'UTF-8'
+            options.release = 17
+            options.compilerArgs.addAll(['-Xlint:deprecation', '-Xlint:unchecked'])
+        }
+
+        tasks.withType(Test).configureEach {
+            useJUnitPlatform()
+            testLogging {
+                events 'failed', 'skipped'
+                exceptionFormat 'full'
+            }
+        }
+    }
+}
+
+tasks.register('proofArtifacts') {
+    group = 'build'
+    description = 'Builds the AtlasHybrid runtime, test plugin, and test mod proof artifacts.'
+    dependsOn ':platform-forge-1.19.2:build', ':test-plugin:build', ':test-mod:build'
+}

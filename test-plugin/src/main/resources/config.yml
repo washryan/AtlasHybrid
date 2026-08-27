@@ -1,0 +1,3 @@
+# Cancel block breaking to exercise bidirectional Forge/Bukkit cancellation.
+cancel-block-break: false
+scheduler-delay-ticks: 20

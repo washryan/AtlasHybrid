@@ -1,0 +1,27 @@
+buildscript {
+    repositories {
+        maven { url = 'https://maven.minecraftforge.net' }
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'net.minecraftforge.gradle:ForgeGradle:5.1.+'
+    }
+}
+
+apply plugin: 'net.minecraftforge.gradle'
+
+java { toolchain.languageVersion = JavaLanguageVersion.of(17) }
+
+minecraft {
+    mappings channel: 'official', version: rootProject.ext.minecraftVersion
+}
+
+dependencies {
+    minecraft "net.minecraftforge:forge:${rootProject.ext.minecraftVersion}-${rootProject.ext.forgeVersion}"
+}
+
+jar {
+    archiveBaseName = 'atlashybrid-test-mod-1.19.2'
+    manifest { attributes('Implementation-Version': project.version) }
+    finalizedBy 'reobfJar'
+}

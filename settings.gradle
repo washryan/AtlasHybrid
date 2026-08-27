@@ -1,0 +1,17 @@
+pluginManagement {
+    repositories {
+        gradlePluginPortal()
+        maven { url = 'https://maven.minecraftforge.net' }
+        mavenCentral()
+    }
+}
+
+rootProject.name = 'AtlasHybrid'
+
+include 'bukkit-api'
+include 'runtime-core'
+include 'plugin-loader'
+include 'diagnostics'
+include 'platform-forge-1.19.2'
+include 'test-plugin'
+include 'test-mod'

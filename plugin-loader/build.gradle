@@ -1,0 +1,9 @@
+plugins { id 'java-library' }
+
+dependencies {
+    api project(':bukkit-api')
+    api project(':runtime-core')
+    api project(':diagnostics')
+    testImplementation platform('org.junit:junit-bom:5.10.3')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+}
