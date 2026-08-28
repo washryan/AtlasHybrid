@@ -80,12 +80,29 @@ added.
 | AtlasHybrid/Forge shutdown | PASS |
 | Duplicate lifecycle/event calls | PASS for observed run: none occurred because plugin loaded zero times |
 
-## Required decision before continuing
+## Phase 9.1 architecture decision
 
-Choose and approve an architecture for permission interception that is native to
-AtlasHybrid/Forge and exposes correct Bukkit semantics, or separately authorize a
-CraftBukkit-compatible implementation project. Until then, LuckPerms must remain
-listed as `BLOCKED`, not `PARTIAL`, `FULL`, or generally supported.
+LuckPerms is not abandoned. Its current status remains **BLOCKED** because the
+permission architecture has been designed but not implemented or integrated.
+This is an architecture gate, not a permanent incompatibility declaration.
+
+[`ADR-006`](../architecture/ADR-006-PERMISSION-SYSTEM.md) selects an
+AtlasHybrid-owned permission core composed into player and console adapters,
+plus a generic provider hook. It rejects a fake CraftBukkit hierarchy and
+plugin-specific transformation as the primary design.
+
+The key conclusion is precise: the LuckPerms Bukkit platform replaces
+`CraftHumanEntity#perm` so subsequent `Player#hasPermission` calls execute its
+`LuckPermsPermissible`. AtlasHybrid can provide equivalent observable behavior
+without changing `ServerPlayer`, but the unmodified Bukkit artifact needs an
+adapter or upstream support to install through the Atlas hook.
+
+The proposed Phase 9.2 is **Permission Core and Services**: public Bukkit
+permission types, `AtlasPermissible`, defaults/children/attachments, permission
+registration, permission-capable player/console senders, a lifecycle-clean
+services manager, a versioned generic provider SPI with a neutral fixture, and
+behavioral tests. It must not claim LuckPerms support or add a hidden LuckPerms
+workaround. LuckPerms adapter integration is a later, separately reviewed phase.
 
 ## AtlasHybrid regression evidence
 

@@ -89,3 +89,97 @@ then removes hooks, closes messaging/storage/watchers, unregisters the API, and
 finally shuts down and awaits the worker pool. This design is inspectably clean,
 but AtlasHybrid cannot validate it dynamically until the architectural gate is
 resolved.
+
+## Phase 9.1 exact symbol audit
+
+The tables below distinguish linker/API requirements from implementation-shape
+assumptions. “Required” means required for the corresponding LuckPerms behavior,
+not necessarily required for the JVM to finish `onEnable`.
+
+### Public Bukkit API uses
+
+| Class | Method or field used | Why LuckPerms uses it | Phase | Required? |
+|---|---|---|---|---|
+| `ConsoleCommandSender` | type identity; `Server#getConsoleSender`; `sendMessage`; permission and op methods | Construct a null-safe console wrapper, identify command context, send output, and evaluate command permissions | Constructor and runtime | Required for bootstrap linkage and console commands |
+| `Permissible` | `hasPermission`, subscription identity | Public subject contract and permission subscription queries | Runtime | Required for generic Bukkit permission behavior |
+| `PermissibleBase` | constructor and all overridable permissible methods | Base class for LuckPerms player permissible, dummy replacement, and verbose delegate | Class initialization and runtime | Required for player interception |
+| `Permission` | constructors, name/default/children, registration | Register LuckPerms command nodes and incorporate Bukkit defaults/children | Enable and runtime | Required with normal configuration |
+| `PermissionDefault` | `OP`, `FALSE`, `getValue(op)` | Configure command defaults and resolve op-dependent defaults | Enable and runtime | Required |
+| `PermissionAttachment` | construct/copy; set/unset/get/remove; removal callback | Preserve existing plugin attachments and translate them into transient LuckPerms nodes | Login/runtime/quit | Required for attachment compatibility |
+| `PermissionAttachmentInfo` | constructor | Return the effective permission snapshot from `LuckPermsPermissible` | Runtime | Required when queried |
+| `PluginManager` | permission add/remove/default/subscription APIs; events; plugin lookup | Register command permissions, observe Bukkit permission changes, listeners, and optional Vault | Load, enable, runtime | Required; breadth varies by feature |
+| `ServicesManager` | `register` and `unregister` | Publish the LuckPerms API and optional Vault providers | Enable/disable | LuckPerms API publication required; Vault optional |
+| `RegisteredServiceProvider` / `ServicePriority` | registration metadata; `Normal` and `High` priorities | Allow consumers to select the winning service implementation | Runtime | Required for service interoperability |
+| `Player` / `CommandSender` | identity, op, permission, messages, player UUID/name | Permission subject, command execution, and sender wrapping | Login and runtime | Required |
+
+`LPBukkitPlugin#registerApiOnPlatform` publishes
+`net.luckperms.api.LuckPerms` with `ServicePriority.Normal`. `VaultHookManager`
+publishes Vault `Permission` and `Chat` at `High` only when Vault is present and
+explicitly unregisters them. The common LuckPerms shutdown unregisters its static
+API provider; normal Bukkit lifecycle is expected to remove plugin-owned service
+registrations, so AtlasHybrid must call `ServicesManager#unregisterAll` during
+plugin cleanup.
+
+### Reflection and implementation-shape uses
+
+| Class | Exact symbol and expected type | Purpose | When | Missing behavior | Required? |
+|---|---|---|---|---|---|
+| `PermissibleInjector` | `org.bukkit.craftbukkit[.version].entity.CraftHumanEntity#perm` as `PermissibleBase` | Read, replace, restore, and verify the player's active permissible | Static init; login/quit/disable | Falls back to `net.glowstone.entity.GlowHumanEntity#permissions`; if both paths fail, class initialization fails | **Yes for functional player permissions** |
+| `PermissibleInjector` | `PermissibleBase#attachments` as `List<PermissionAttachment>` | Transfer existing attachments to `LuckPermsPermissible` before replacement | Static init/login | Missing field causes `ExceptionInInitializerError` | **Yes for this injector** |
+| `LuckPermsPermissible` | `PermissibleBase#attachments` | Replace the inherited list with a proxy for reflective attachment users | Static init/constructor | Missing field causes `ExceptionInInitializerError` | Yes for this class shape |
+| `DummyPermissibleBase` | `PermissibleBase#attachments`, `PermissibleBase#permissions` | Copy internal state into monitored wrappers and create a post-quit dummy | Static init/runtime | Missing field causes `ExceptionInInitializerError` | Required by monitoring/quit path |
+| `LuckPermsPermissionAttachment` | `PermissionAttachment#permissions` as `Map<String,Boolean>` | Install a proxy map so reflective mutations still update LuckPerms transient nodes | Static init/attachment creation | Missing field causes `ExceptionInInitializerError` | Required by LuckPerms attachment implementation |
+| `LuckPermsPermissionMap` | `Permission#children` as `Map<String,Boolean>` | Wrap child maps, invalidate caches on mutation, and pre-resolve child relationships | Map injection/runtime | Missing field causes `ExceptionInInitializerError` | Required when Bukkit child/default processing is enabled |
+| `InjectorPermissionMap` | `SimplePluginManager#permissions` as `Map<String,Permission>` | Observe permission registration and child changes | Enable and scheduled reinjection | Exception is caught and logged; plugin field remains unset | Semantically required with default processing |
+| `InjectorDefaultsMap` | `SimplePluginManager#defaultPerms` as `Map<Boolean,Set<Permission>>` | Observe op/non-op default sets and invalidate calculators | Enable and scheduled reinjection | Exception is caught and logged; plugin field remains unset | Semantically required with default processing |
+| `InjectorSubscriptionMap` | `SimplePluginManager#permSubs` as `Map<String,Map<Permissible,Boolean>>` | Include LuckPerms subjects in Bukkit subscription queries without eagerly storing all player nodes | Enable and scheduled reinjection | Exception is caught and logged | Required for subscription compatibility; not basic direct checks |
+| `CommandMapUtil` | `SimplePluginManager#commandMap` as `CommandMap` | Normalize console commands beginning with `/` | Class init/runtime command event | Missing field causes initializer/runtime failure on this path | Optional command normalization |
+| `PluginManagerUtil` | `SimplePluginManager#dependencyGraph` as Guava `MutableGraph<String>` | Add a synthetic LuckPerms-to-Vault ordering edge | Enable | Missing/foreign manager fails silently | Optional workaround |
+| `PermissibleMonitoringInjector` | `ServerCommandSender#perm`; static `#blockPermInst` | Wrap console/command-block checks for verbose monitoring | Enable/disable | Each operation catches and ignores all exceptions | Optional verbose feature |
+| `PermissibleMonitoringInjector` | static `CraftEntity#getPermissibleBase()` and static `CraftEntity#perm` | Wrap non-player entity checks for verbose monitoring | Enable/disable | Exception ignored | Optional verbose feature |
+| `LPBukkitBootstrap` | `PluginClassLoader#getPlugin()` | Attribute dependency/classloader activity to a Bukkit plugin | Runtime diagnostics/dependencies | Reflective exception propagates only to the caller of identification | Optional attribution |
+
+`CraftBukkitImplementation` derives an optional version segment only when the
+server class name matches
+`org.bukkit.craftbukkit.<version>.CraftServer`; AtlasHybrid would produce the
+unversioned lookup `org.bukkit.craftbukkit.<symbol>`. The class names and fields
+are CraftBukkit implementation details and are version-fragile even though the
+helper supports both versioned and unversioned package layouts.
+
+## Failure and fallback conclusions
+
+- The player fallback is **only Glowstone**, not a public Bukkit hook.
+- Console, command-block, and generic-entity injection is optional verbose
+  monitoring because every exception is swallowed.
+- Player injection is mandatory for the Bukkit platform's basic permission
+  behavior: login is denied when it fails.
+- Map injection may allow enable to continue after logging, but normal default
+  configuration later depends on the populated maps. It is not safe to call the
+  failure semantically optional.
+- `dependencyGraph` injection and slash-prefixed console normalization are not
+  permission correctness requirements.
+
+## Can AtlasHybrid supply `SimplePluginManager` shape?
+
+Technically yes: an Atlas-owned public class could expose compatible private
+fields and `AtlasPluginManager` could extend it. This would satisfy the
+`instanceof` check and the five reflective field lookups if their types and
+names matched. It would not solve `CraftHumanEntity#perm`, and it would make
+private upstream layout part of the AtlasHybrid ABI. ADR-006 therefore rejects
+this as the primary permission architecture.
+
+## Injection answer
+
+For the unmodified Bukkit platform of LuckPerms 5.5.81:
+
+- **A — delegate `Player#hasPermission` to the provider:** this is the desired
+  observable outcome;
+- **B — replace the CraftPlayer permissible field:** this is the concrete
+  mechanism LuckPerms uses to obtain A;
+- **C — both:** accurate when “both” means outcome plus mechanism, not two
+  independent alternatives.
+
+AtlasHybrid-owned composition can provide A without Minecraft mutation. It
+cannot make the current LuckPerms Bukkit artifact install its permissible unless
+LuckPerms uses an Atlas provider hook, an adapter is supplied, or AtlasHybrid
+emulates/transforms the private CraftBukkit path.
