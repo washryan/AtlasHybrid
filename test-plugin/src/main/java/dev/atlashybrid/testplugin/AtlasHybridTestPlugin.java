@@ -2,6 +2,7 @@ package dev.atlashybrid.testplugin;
 
 import dev.atlashybrid.runtime.permission.AtlasPermissions;
 import dev.atlashybrid.runtime.permission.PermissionProviderPriority;
+import java.io.File;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
@@ -9,6 +10,8 @@ import org.bukkit.Location;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
+import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
@@ -37,6 +40,12 @@ public final class AtlasHybridTestPlugin extends JavaPlugin implements Listener,
     public void onEnable() {
         saveDefaultConfig();
         reloadConfig();
+        FileConfiguration loadedFromFile = YamlConfiguration.loadConfiguration(new File(getDataFolder(), "config.yml"));
+        if (loadedFromFile.getInt("scheduler-delay-ticks", -1) < 0
+            || !loadedFromFile.isSet("cancel-block-break")) {
+            throw new IllegalStateException("YAML file loading proof failed");
+        }
+        getLogger().info("[AtlasHybridIntegration] YAML_LOAD_OK");
         if (getCommand("atlas") == null) {
             throw new IllegalStateException("Atlas command was not created from plugin.yml");
         }

@@ -219,3 +219,43 @@ WarpPlugin `FULL` regressions, Permission Core and ServicesManager checks, and
 two byte-identical clean builds. LuckPerms remains **BLOCKED** and unsupported;
 this later public API boundary does not remove the already documented
 CraftBukkit permission-injection architecture gate.
+
+## Phase 9.5 raw boot #5
+
+Phase 9.5 added the generic nested Configuration API and safe UTF-8 YAML loader.
+The unchanged LuckPerms artifact passed `YamlConfiguration#loadConfiguration(File)`,
+read its real 37 KB configuration, completed `BukkitLoaderPlugin.onLoad`, and
+was recorded as loaded. Enable then began and reached the Adventure Bukkit
+audience/sender factory.
+
+The next first failure is:
+
+```text
+[AtlasHybrid Compatibility]
+Plugin: LuckPerms
+Missing API: org.bukkit.Server#getOnlinePlayers()
+Status: NOT_IMPLEMENTED
+Runtime: 0.1.0-alpha
+
+java.lang.NoSuchMethodError:
+java.util.Collection org.bukkit.Server.getOnlinePlayers()
+    at me.lucko.luckperms.lib.adventure.platform.bukkit.BukkitAudiencesImpl.<init>(BukkitAudiencesImpl.java:93)
+    at me.lucko.luckperms.bukkit.BukkitSenderFactory$AdventurePlatformBukkitSenderFactory.<init>(BukkitSenderFactory.java:142)
+    at me.lucko.luckperms.bukkit.BukkitSenderFactory.create(BukkitSenderFactory.java:50)
+    at me.lucko.luckperms.bukkit.LPBukkitPlugin.setupSenderFactory(LPBukkitPlugin.java:113)
+    at me.lucko.luckperms.common.plugin.AbstractLuckPermsPlugin.enable(AbstractLuckPermsPlugin.java:155)
+    at me.lucko.luckperms.bukkit.LPBukkitBootstrap.onEnable(LPBukkitBootstrap.java:177)
+```
+
+Classification: **CORE_API**. This is a normal public server/player API method,
+not another Configuration method and not CraftBukkit, NMS, Paper or Mixin. Per
+the Phase 9.5 stop gate it is documented but not implemented. The raw-boot
+summary was one plugin discovered, one loaded and one unsupported call; enable
+did not complete. The expected compatibility `ERROR` was preserved, there was
+no `FATAL`, and all dimensions were saved during shutdown.
+
+The phase passed `59/59` tests, the Forge integration proof with `YAML_LOAD_OK`
+and `TAB_COMPLETION_OK` exactly once, WelcomeMessage and WarpPlugin `FULL`
+regressions, Permission Core, ServicesManager, JavaPlugin bootstrap and Command
+API checks, and two byte-identical clean builds. LuckPerms remains **BLOCKED**
+and unsupported pending later explicitly scoped work.

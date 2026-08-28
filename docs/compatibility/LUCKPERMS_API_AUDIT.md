@@ -43,7 +43,7 @@ Risk is classified as `TRIVIAL`, `CORE_API`, `ARCHITECTURAL`, or `BLOCKED`.
 | Console and sender hierarchy | `ConsoleCommandSender`, `RemoteConsoleCommandSender`, `BlockCommandSender`, `ProxiedCommandSender`, conversations, permission methods | MISSING | CORE_API | The first raw-boot failure is `ConsoleCommandSender`. Adding only this interface would not make startup viable. |
 | Server facade | name/version/Bukkit version, online/offline player lookup, operators, scheduler, plugin manager, services, messenger | PARTIAL | CORE_API | AtlasHybrid has a narrow `Server`; offline players, operators, services and messenger are absent. |
 | Commands | `PluginCommand`, `TabExecutor`, `CommandMap`, sender permission checks, server command events | PARTIAL | CORE_API | `TabCompleter`, `TabExecutor`, aliases and Forge/Brigadier player/console completion are implemented. Command events and the broader command-map contract remain absent. |
-| Configuration | `YamlConfiguration`, `ConfigurationSection`, typed maps/lists, section traversal | PARTIAL | CORE_API | Current deterministic YAML supports tested scalar/list/location paths, not Bukkit's section model required by `BukkitConfigAdapter`. |
+| Configuration | `YamlConfiguration`, `ConfigurationSection`, typed maps/lists, section traversal | SUPPORTED for observed adapter path | CORE_API | Safe UTF-8 File/Reader loading, nested dot paths, typed getters, scalar lists and section key traversal now cover `BukkitConfigAdapter`; defaults/options and full YAML remain outside the bounded subset. |
 | Events | pre-login/login/quit, join, world/game-mode change, command, plugin enable/disable, server command | PARTIAL | CORE_API | Join/quit exist; most LuckPerms lifecycle, context and command events do not. Async pre-login also needs a real thread-safety contract. |
 | Scheduler | Bukkit sync scheduling plus LuckPerms' own scheduled executor and `ForkJoinPool` | PARTIAL | CORE_API | Existing sync bridge is narrow. LuckPerms' async pool is real and has explicit termination, but a successful lifecycle cannot be reached to validate it. |
 | Services | `ServicesManager.register`, `ServicePriority`, API provider registration and optional Vault services | MISSING | CORE_API | A real, generic service registry would be required, including ownership and cleanup on disable. |
@@ -237,3 +237,20 @@ provide:
 | CraftBukkit internals? | No; the known later permission-injection paths have not been reached |
 | Category | **TRIVIAL** |
 | Phase 9.4 action | Stop and document; do not implement the next API or continue the cascade |
+
+## Phase 9.5 observed loader boundary
+
+The unchanged artifact loaded its full configuration through the new public
+Configuration API, completed `onLoad` and entered `onEnable`. Adventure's Bukkit
+audience implementation then queried the server's online-player collection:
+
+| Item | Classification |
+|---|---|
+| Symbol/path | `BukkitAudiencesImpl.<init>:93` -> `Server#getOnlinePlayers(): Collection` |
+| Diagnostic | `Missing API: org.bukkit.Server#getOnlinePlayers()`, `Status: NOT_IMPLEMENTED` |
+| Lifecycle phase | `BukkitLoaderPlugin.onEnable` via `LPBukkitBootstrap.onEnable:177`, during sender-factory setup |
+| Previous boundary | `YamlConfiguration#loadConfiguration(File)` passed; real config values and nested sections were consumed |
+| Public API? | Yes, normal Bukkit server/player collection API |
+| CraftBukkit internals? | No; the known later permissible/map injection paths have not been reached |
+| Category | **CORE_API** |
+| Phase 9.5 action | Stop and document; do not implement `Server#getOnlinePlayers` or continue the cascade |
