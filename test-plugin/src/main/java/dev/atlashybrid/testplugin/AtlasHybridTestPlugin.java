@@ -14,6 +14,9 @@ import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.bukkit.event.Event;
+import org.bukkit.event.EventPriority;
+import org.bukkit.event.HandlerList;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
@@ -51,6 +54,15 @@ public final class AtlasHybridTestPlugin extends JavaPlugin implements Listener,
         }
         getCommand("atlas").setExecutor(this);
         getServer().getPluginManager().registerEvents(this, this);
+        java.util.concurrent.atomic.AtomicInteger executorCalls = new java.util.concurrent.atomic.AtomicInteger();
+        Listener executorListener = new Listener() { };
+        getServer().getPluginManager().registerEvent(ExecutorProbeEvent.class, executorListener,
+            EventPriority.NORMAL, (registered, event) -> executorCalls.incrementAndGet(), this, false);
+        getServer().getPluginManager().callEvent(new ExecutorProbeEvent());
+        if (executorCalls.get() != 1) {
+            throw new IllegalStateException("EventExecutor integration proof failed");
+        }
+        getLogger().info("[AtlasHybridIntegration] EVENT_EXECUTOR_OK");
         registerPermissionProof();
         long delay = getConfig().getInt("scheduler-delay-ticks", 20);
         getServer().getScheduler().runTaskLater(this,
@@ -158,5 +170,11 @@ public final class AtlasHybridTestPlugin extends JavaPlugin implements Listener,
     @FunctionalInterface
     public interface PermissionProofService {
         String status();
+    }
+
+    public static final class ExecutorProbeEvent extends Event {
+        private static final HandlerList HANDLERS = new HandlerList();
+        @Override public HandlerList getHandlers() { return HANDLERS; }
+        public static HandlerList getHandlerList() { return HANDLERS; }
     }
 }

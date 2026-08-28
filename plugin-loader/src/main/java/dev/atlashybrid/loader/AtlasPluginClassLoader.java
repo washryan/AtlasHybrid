@@ -2,6 +2,7 @@ package dev.atlashybrid.loader;
 
 import java.net.URL;
 import java.net.URLClassLoader;
+import java.io.IOException;
 import java.util.List;
 import java.util.Objects;
 import org.bukkit.plugin.java.JavaPluginBootstrap;
@@ -18,6 +19,7 @@ public final class AtlasPluginClassLoader extends URLClassLoader implements Java
     private final List<AtlasPluginClassLoader> dependencies;
     private final JavaPluginBootstrap.Context bootstrapContext;
     private final ThreadLocal<Integer> constructionDepth = new ThreadLocal<>();
+    private volatile boolean closed;
 
     public AtlasPluginClassLoader(
         URL jar,
@@ -48,6 +50,14 @@ public final class AtlasPluginClassLoader extends URLClassLoader implements Java
 
     boolean hasActiveConstructionContext() {
         return constructionDepth.get() != null;
+    }
+
+    boolean isClosed() { return closed; }
+
+    @Override
+    public void close() throws IOException {
+        super.close();
+        closed = true;
     }
 
     private boolean owns(ClassLoader requestingClassLoader) {

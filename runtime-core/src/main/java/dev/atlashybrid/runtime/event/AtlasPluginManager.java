@@ -5,6 +5,7 @@ import dev.atlashybrid.runtime.permission.AtlasPermissionRegistry;
 import dev.atlashybrid.runtime.permission.PermissionProviderRegistry;
 import dev.atlashybrid.runtime.service.AtlasServicesManager;
 import java.lang.reflect.Method;
+import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -15,10 +16,14 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import org.bukkit.event.Event;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventException;
+import org.bukkit.event.EventPriority;
+import org.bukkit.event.HandlerList;
 import org.bukkit.event.Listener;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.PluginManager;
 import org.bukkit.plugin.RegisteredListener;
+import org.bukkit.plugin.EventExecutor;
 import org.bukkit.permissions.Permissible;
 import org.bukkit.permissions.Permission;
 
@@ -49,9 +54,6 @@ public final class AtlasPluginManager implements PluginManager {
 
     @Override
     public void registerEvents(Listener listener, Plugin plugin) {
-        if (!plugin.isEnabled()) {
-            throw new IllegalStateException("Plugin must be enabled before registering events: " + plugin.getName());
-        }
         for (Method method : listener.getClass().getDeclaredMethods()) {
             EventHandler handler = method.getAnnotation(EventHandler.class);
             if (handler == null) continue;
@@ -61,17 +63,46 @@ public final class AtlasPluginManager implements PluginManager {
             }
             @SuppressWarnings("unchecked")
             Class<? extends Event> eventType = (Class<? extends Event>) parameters[0];
-            try {
-                Method accessor = eventType.getMethod("getHandlerList");
-                Object value = accessor.invoke(null);
-                if (!(value instanceof org.bukkit.event.HandlerList list)) {
-                    throw new IllegalArgumentException("getHandlerList returned wrong type for " + eventType.getName());
+            method.setAccessible(true);
+            EventExecutor executor = (registered, event) -> {
+                try {
+                    method.invoke(registered, event);
+                } catch (InvocationTargetException exception) {
+                    throw new EventException(exception.getCause());
+                } catch (ReflectiveOperationException exception) {
+                    throw new EventException(exception);
                 }
-                list.register(new RegisteredListener(listener, method, handler.priority(), plugin, handler.ignoreCancelled()));
-            } catch (ReflectiveOperationException exception) {
-                throw new IllegalArgumentException("Event lacks public static getHandlerList(): " + eventType.getName(), exception);
-            }
+            };
+            registerEvent(eventType, listener, handler.priority(), executor, plugin, handler.ignoreCancelled());
         }
+    }
+
+    @Override
+    public void registerEvent(Class<? extends Event> eventType, Listener listener, EventPriority priority,
+                              EventExecutor executor, Plugin plugin) {
+        registerEvent(eventType, listener, priority, executor, plugin, false);
+    }
+
+    @Override
+    public void registerEvent(Class<? extends Event> eventType, Listener listener, EventPriority priority,
+                              EventExecutor executor, Plugin plugin, boolean ignoreCancelled) {
+        java.util.Objects.requireNonNull(eventType, "eventType");
+        java.util.Objects.requireNonNull(listener, "listener");
+        java.util.Objects.requireNonNull(priority, "priority");
+        java.util.Objects.requireNonNull(executor, "executor");
+        java.util.Objects.requireNonNull(plugin, "plugin");
+        if (!plugin.isEnabled()) {
+            throw new IllegalStateException("Plugin must be enabled before registering events: " + plugin.getName());
+        }
+        HandlerList handlers = handlerList(eventType);
+        EventExecutor checked = (registered, event) -> {
+            if (!eventType.isInstance(event)) {
+                throw new EventException(new IllegalArgumentException(
+                    "Registered for " + eventType.getName() + " but received " + event.getClass().getName()));
+            }
+            executor.execute(registered, event);
+        };
+        handlers.register(new RegisteredListener(listener, checked, priority, plugin, ignoreCancelled));
     }
 
     @Override
@@ -80,23 +111,24 @@ public final class AtlasPluginManager implements PluginManager {
             try (CompatibilityRuntime.Scope ignored = CompatibilityRuntime.enter(listener.getPlugin().getName())) {
                 listener.callEvent(event);
             } catch (Throwable throwable) {
-                logger.log(Level.SEVERE, "Plugin " + listener.getPlugin().getName() + " failed handling " + event.getEventName(), throwable);
+                logger.log(Level.SEVERE, "[AtlasHybrid Event]\n"
+                    + "Plugin: " + listener.getPlugin().getName() + "\n"
+                    + "Event: " + event.getEventName() + "\n"
+                    + "Listener: " + listener.getListener().getClass().getName() + "\n"
+                    + "Status: EXECUTION_FAILED", throwable);
             }
         }
     }
 
-    public void unregisterPlugin(Plugin plugin, List<Class<? extends Event>> knownEvents) {
-        for (Class<? extends Event> event : knownEvents) {
-            try {
-                org.bukkit.event.HandlerList list = (org.bukkit.event.HandlerList) event.getMethod("getHandlerList").invoke(null);
-                list.unregister(plugin);
-            } catch (ReflectiveOperationException exception) {
-                logger.log(Level.WARNING, "Cannot unregister event handlers for " + event.getName(), exception);
-            }
-        }
+    public void cleanupPluginResources(Plugin plugin) {
+        HandlerList.unregisterAll(plugin);
         permissions.removeAttachments(plugin);
         providers.unregisterAll(plugin);
         services.unregisterAll(plugin);
+    }
+
+    public void unregisterPlugin(Plugin plugin) {
+        cleanupPluginResources(plugin);
         removePlugin(plugin);
     }
 
@@ -117,4 +149,14 @@ public final class AtlasPluginManager implements PluginManager {
     @Override public Set<Permissible> getDefaultPermSubscriptions(boolean op) { return permissions.getDefaultPermSubscriptions(op); }
     public synchronized List<Plugin> snapshot() { return new ArrayList<>(plugins.values()); }
     private static String key(String value) { return value.toLowerCase(Locale.ROOT); }
+
+    private static HandlerList handlerList(Class<? extends Event> eventType) {
+        try {
+            Object value = eventType.getMethod("getHandlerList").invoke(null);
+            if (value instanceof HandlerList handlers) return handlers;
+            throw new IllegalArgumentException("getHandlerList returned wrong type for " + eventType.getName());
+        } catch (ReflectiveOperationException exception) {
+            throw new IllegalArgumentException("Event lacks public static getHandlerList(): " + eventType.getName(), exception);
+        }
+    }
 }

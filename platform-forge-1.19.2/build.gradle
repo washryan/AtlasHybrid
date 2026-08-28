@@ -61,10 +61,14 @@ def manualServerProperties = project.file('manual/server.properties')
 tasks.register('prepareIntegrationServer') {
     group = 'atlashybrid'
     description = 'Copies the current internal test plugin into the automated integration run.'
-    dependsOn ':test-plugin:jar'
+    dependsOn ':test-plugin:jar', ':test-plugin:failedEnableJar'
 
     inputs.file(project(':test-plugin').tasks.named('jar').flatMap { it.archiveFile })
-    outputs.file(new File(integrationRunDirectory, 'plugins/AtlasHybridTestPlugin.jar'))
+    inputs.file(project(':test-plugin').tasks.named('failedEnableJar').flatMap { it.archiveFile })
+    outputs.files(
+        new File(integrationRunDirectory, 'plugins/AtlasHybridTestPlugin.jar'),
+        new File(integrationRunDirectory, 'plugins/AtlasHybridFailedEnableTestPlugin.jar')
+    )
 
     doLast {
         new File(integrationRunDirectory, 'plugins').mkdirs()
@@ -72,6 +76,11 @@ tasks.register('prepareIntegrationServer') {
             from project(':test-plugin').tasks.named('jar').flatMap { it.archiveFile }
             into new File(integrationRunDirectory, 'plugins')
             rename { 'AtlasHybridTestPlugin.jar' }
+        }
+        copy {
+            from project(':test-plugin').tasks.named('failedEnableJar').flatMap { it.archiveFile }
+            into new File(integrationRunDirectory, 'plugins')
+            rename { 'AtlasHybridFailedEnableTestPlugin.jar' }
         }
     }
 }

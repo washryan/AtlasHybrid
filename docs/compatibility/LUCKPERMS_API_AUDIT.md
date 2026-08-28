@@ -278,3 +278,30 @@ but raw boot #6 did not reach it, so OfflinePlayer remains deferred.
 | CraftBukkit internals? | No; known later permission injection remains unreached |
 | Category | **CORE_API** |
 | Phase 9.6 action | Stop and document; do not add `EventExecutor` or continue the cascade |
+
+## Phase 9.7 observed event and lifecycle boundary
+
+The generic Event API let Adventure register its explicit executors through
+`PluginManager#registerEvent`; the former `EventExecutor` linker failure no
+longer occurs. LuckPerms reached its first enable-time message, which initializes
+the Adventure Bukkit component serializer.
+
+| Item | Classification |
+|---|---|
+| Passed boundary | `BukkitAudiencesImpl.registerEvent:218` -> `EventExecutor` and public `registerEvent` |
+| New symbol/path | `BukkitComponentSerializer.<clinit>:50` -> `org.bukkit.Material` |
+| Diagnostic | `Missing API: org.bukkit.Material`, `Status: NOT_IMPLEMENTED` |
+| Lifecycle phase | `BukkitLoaderPlugin.onEnable`, while sending the enable/startup message |
+| Public API? | Yes; registry-backed Bukkit material enum/type surface |
+| CraftBukkit internals? | No at this point; the known later permission injection remains unreached |
+| Category | **CORE_API** |
+| Phase 9.7 action | Stop and document; do not stub `Material` or continue the cascade |
+
+The failed-enable audit found that the Spigot lifecycle marks a plugin enabled
+before invoking `onEnable`, so a failed callback remains eligible for later
+disable. AtlasHybrid performs that best-effort disable immediately, then rolls
+back every Atlas-owned registration and returns the plugin to disabled state.
+In raw boot #7, LuckPerms' partial `onDisable` threw because `webEditorStore` was
+not initialized; the exception was suppressed onto the original failure and did
+not block rollback. No attributable live threads remained, and normal `stop`
+ended both Minecraft and the Gradle launcher without manual interruption.

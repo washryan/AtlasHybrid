@@ -21,16 +21,11 @@ import java.util.logging.Logger;
 import java.util.stream.Stream;
 import org.bukkit.Server;
 import org.bukkit.event.Event;
-import org.bukkit.event.block.BlockBreakEvent;
-import org.bukkit.event.player.PlayerJoinEvent;
-import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.plugin.java.JavaPluginBootstrap;
 import org.bukkit.plugin.java.PluginBootstrapPhaseException;
 
 public final class PluginRuntime implements AutoCloseable {
-    private static final List<Class<? extends Event>> KNOWN_EVENTS = List.of(PlayerJoinEvent.class, PlayerQuitEvent.class, BlockBreakEvent.class);
-
     private final Server server;
     private final AtlasPluginManager pluginManager;
     private final CommandRegistry commands;
@@ -40,6 +35,8 @@ public final class PluginRuntime implements AutoCloseable {
     private final List<LoadedPlugin> loaded = new ArrayList<>();
     private final PluginMetadataParser parser = new PluginMetadataParser();
     private final DependencyResolver resolver = new DependencyResolver();
+    private final PluginThreadMonitor threadMonitor = new PluginThreadMonitor();
+    private final Map<String, List<String>> failedEnableThreads = new HashMap<>();
     private int discoveredCount;
 
     public PluginRuntime(Server server, AtlasPluginManager pluginManager, CommandRegistry commands, AtlasScheduler scheduler, Logger logger, ClassLoader apiClassLoader) {
@@ -122,7 +119,7 @@ public final class PluginRuntime implements AutoCloseable {
             if (plugin != null) {
                 scheduler.cancelTasks(plugin);
                 commands.unregister(plugin);
-                pluginManager.unregisterPlugin(plugin, KNOWN_EVENTS);
+                pluginManager.unregisterPlugin(plugin);
             }
             try { classLoader.close(); } catch (IOException closeFailure) { throwable.addSuppressed(closeFailure); }
             throw throwable;
@@ -131,6 +128,7 @@ public final class PluginRuntime implements AutoCloseable {
 
     public void enableAll() {
         for (LoadedPlugin item : loaded) {
+            PluginThreadMonitor.Snapshot threadBaseline = threadMonitor.capture();
             try {
                 try (CompatibilityRuntime.Scope ignored = CompatibilityRuntime.enter(item.plugin().getName())) {
                     item.plugin().atlasSetEnabled(true);
@@ -139,9 +137,7 @@ public final class PluginRuntime implements AutoCloseable {
             } catch (Throwable throwable) {
                 reportCompatibilityFailure(item.plugin().getName(), throwable);
                 logger.log(Level.SEVERE, "Failed to enable plugin " + item.plugin().getName(), throwable);
-                scheduler.cancelTasks(item.plugin());
-                commands.unregister(item.plugin());
-                pluginManager.unregisterPlugin(item.plugin(), KNOWN_EVENTS);
+                rollbackFailedEnable(item, threadBaseline);
             }
         }
     }
@@ -160,7 +156,7 @@ public final class PluginRuntime implements AutoCloseable {
                     logger.log(Level.SEVERE, "Failed to disable plugin " + plugin.getName(), throwable);
                 }
             }
-            pluginManager.unregisterPlugin(plugin, KNOWN_EVENTS);
+            pluginManager.unregisterPlugin(plugin);
         }
     }
 
@@ -177,6 +173,9 @@ public final class PluginRuntime implements AutoCloseable {
     public int loadedCount() { return loaded.size(); }
     public int discoveredCount() { return discoveredCount; }
     public List<LoadedPlugin> loadedPlugins() { return List.copyOf(loaded); }
+    public List<String> failedEnableThreads(String plugin) {
+        return failedEnableThreads.getOrDefault(key(plugin), List.of());
+    }
     private static String key(String value) { return value.toLowerCase(Locale.ROOT); }
 
     private static void reportCompatibilityFailure(String plugin, Throwable throwable) {
@@ -188,6 +187,22 @@ public final class PluginRuntime implements AutoCloseable {
                 }
             }
             CompatibilityRuntime.reportLinkageFailure(throwable);
+        }
+    }
+
+    private void rollbackFailedEnable(LoadedPlugin item, PluginThreadMonitor.Snapshot threadBaseline) {
+        JavaPlugin plugin = item.plugin();
+        scheduler.cancelTasks(plugin);
+        commands.unregister(plugin);
+        pluginManager.cleanupPluginResources(plugin);
+        List<String> liveThreads = threadMonitor.findNewLiveThreads(threadBaseline, plugin, item.classLoader());
+        failedEnableThreads.put(key(plugin.getName()), liveThreads);
+        logger.info("[AtlasHybridIntegration] FAILED_ENABLE_ROLLBACK_OK plugin=" + plugin.getName());
+        if (!liveThreads.isEmpty()) {
+            logger.warning("[AtlasHybrid Compatibility]\n"
+                + "Plugin: " + plugin.getName() + "\n"
+                + "Status: ENABLE_FAILED_WITH_LIVE_THREADS\n"
+                + "Threads: " + String.join(", ", liveThreads));
         }
     }
 }

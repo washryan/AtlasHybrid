@@ -249,7 +249,7 @@ class PermissionCoreTest {
         subject.addAttachment(plugin, "example.attachment", true);
         providers.register(plugin, (ignored, node) -> Optional.of(true), PermissionProviderPriority.NORMAL);
         services.register(Runnable.class, () -> { }, plugin, ServicePriority.Normal);
-        pluginManager.unregisterPlugin(plugin, List.of());
+        pluginManager.unregisterPlugin(plugin);
         assertFalse(subject.hasPermission("example.attachment"));
         assertEquals(0, providers.size());
         assertNull(services.load(Runnable.class));

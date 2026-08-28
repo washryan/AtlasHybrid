@@ -1,0 +1,5 @@
+name: AtlasHybridFailedEnableTestPlugin
+version: 0.1.0-alpha
+main: dev.atlashybrid.failedplugin.AtlasHybridFailedEnableTestPlugin
+api-version: '1.19'
+description: Controlled failed-enable rollback fixture for AtlasHybrid.

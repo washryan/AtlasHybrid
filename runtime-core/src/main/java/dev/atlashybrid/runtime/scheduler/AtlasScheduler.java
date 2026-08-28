@@ -53,6 +53,9 @@ public final class AtlasScheduler implements BukkitScheduler {
     @Override public synchronized void cancelTasks(Plugin plugin) { queue.stream().filter(task -> task.owner == plugin).forEach(Task::cancel); }
     public synchronized void stopAccepting() { accepting = false; }
     public synchronized int pendingTasks() { return (int) queue.stream().filter(task -> !task.cancelled).count(); }
+    public synchronized int pendingTasks(Plugin plugin) {
+        return (int) queue.stream().filter(task -> !task.cancelled && task.owner == plugin).count();
+    }
     public synchronized long currentTick() { return currentTick; }
 
     private static final class Task implements BukkitTask {

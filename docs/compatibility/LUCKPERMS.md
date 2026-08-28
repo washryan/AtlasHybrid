@@ -302,3 +302,44 @@ Gradle launch alive until the already-stopped process was interrupted.
 LuckPerms remains **BLOCKED** and unsupported. No `EventExecutor`, OfflinePlayer
 API, CraftBukkit shape or permission-injection workaround was added in this
 phase.
+
+## Phase 9.7 raw boot #7
+
+Phase 9.7 added generic explicit event registration, deterministic priority
+dispatch, cancelled-event policy and failed-enable rollback. The unchanged
+LuckPerms artifact passed `BukkitAudiencesImpl.registerEvent`, completed load,
+entered `onEnable` and advanced into Adventure's Bukkit component serializer.
+
+The next first failure is:
+
+```text
+[AtlasHybrid Compatibility]
+Plugin: LuckPerms
+Missing API: org.bukkit.Material
+Status: NOT_IMPLEMENTED
+Runtime: 0.1.0-alpha
+
+java.lang.NoClassDefFoundError: org/bukkit/Material
+    at me.lucko.luckperms.lib.adventure.platform.bukkit.BukkitComponentSerializer.<clinit>(BukkitComponentSerializer.java:50)
+    at me.lucko.luckperms.lib.adventure.platform.bukkit.BukkitFacet$Message.createMessage(BukkitFacet.java:76)
+    at me.lucko.luckperms.common.plugin.AbstractLuckPermsPlugin.enable(AbstractLuckPermsPlugin.java:158)
+    at me.lucko.luckperms.bukkit.LPBukkitBootstrap.onEnable(LPBukkitBootstrap.java:177)
+```
+
+Classification: **CORE_API**. `Material` is a normal public Bukkit type, but a
+substantial registry-backed API rather than a safe one-symbol stub. Per the
+stop gate it was recorded and not implemented; the known later CraftBukkit
+permission-injection boundary remains unchanged.
+
+Atomic failure handling called LuckPerms' `onDisable` immediately. Because
+enable had not initialized its web-editor store, that callback threw an internal
+`NullPointerException`; AtlasHybrid retained it as a suppressed exception and
+still completed listener, task, service, provider, attachment and command
+rollback. `FAILED_ENABLE_ROLLBACK_OK` appeared once. No new LuckPerms-owned live
+thread was diagnosed after cleanup. Minecraft accepted `stop`, saved all
+dimensions, and Gradle exited normally without forced interruption.
+
+The Phase 9.7 proof also emits `EVENT_EXECUTOR_OK` exactly once. WelcomeMessage
+and WarpPlugin remain `FULL`. LuckPerms remains **BLOCKED** and unsupported; no
+LuckPerms-specific code, CraftBukkit shape, NMS, Mixin or instrumentation was
+added.

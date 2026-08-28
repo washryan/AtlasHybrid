@@ -23,7 +23,7 @@ public abstract class JavaPlugin implements Plugin {
     private File dataFolder;
     private Logger logger;
     private FileConfiguration config;
-    private boolean enabled;
+    private LifecycleState lifecycle = LifecycleState.DISABLED;
     private boolean initialized;
     private boolean bootstrapBound;
 
@@ -57,22 +57,31 @@ public abstract class JavaPlugin implements Plugin {
 
     public final synchronized void atlasSetEnabled(boolean value) {
         requireInitialized();
-        if (enabled == value) {
+        if (isEnabled() == value) {
             return;
         }
         if (value) {
-            enabled = true;
+            lifecycle = LifecycleState.ENABLING;
             try {
                 onEnable();
+                lifecycle = LifecycleState.ENABLED;
             } catch (Throwable throwable) {
-                enabled = false;
+                lifecycle = LifecycleState.DISABLING;
+                try {
+                    onDisable();
+                } catch (Throwable disableFailure) {
+                    throwable.addSuppressed(disableFailure);
+                } finally {
+                    lifecycle = LifecycleState.DISABLED;
+                }
                 throw throwable;
             }
         } else {
+            lifecycle = LifecycleState.DISABLING;
             try {
                 onDisable();
             } finally {
-                enabled = false;
+                lifecycle = LifecycleState.DISABLED;
             }
         }
     }
@@ -89,7 +98,11 @@ public abstract class JavaPlugin implements Plugin {
     @Override public final Server getServer() { requireContext("JavaPlugin#getServer"); return server; }
     @Override public final Logger getLogger() { requireContext("JavaPlugin#getLogger"); return logger; }
     @Override public final File getDataFolder() { requireContext("JavaPlugin#getDataFolder"); return dataFolder; }
-    @Override public final boolean isEnabled() { return enabled; }
+    @Override public final boolean isEnabled() {
+        return lifecycle == LifecycleState.ENABLING
+            || lifecycle == LifecycleState.ENABLED
+            || lifecycle == LifecycleState.DISABLING;
+    }
 
     public final PluginCommand getCommand(String name) {
         requireInitialized("JavaPlugin#getCommand");
@@ -158,5 +171,12 @@ public abstract class JavaPlugin implements Plugin {
         if (!initialized) {
             throw new PluginBootstrapPhaseException(api, "CONSTRUCTION");
         }
+    }
+
+    private enum LifecycleState {
+        DISABLED,
+        ENABLING,
+        ENABLED,
+        DISABLING
     }
 }

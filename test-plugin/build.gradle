@@ -1,8 +1,20 @@
 plugins { id 'java' }
 
+sourceSets {
+    failedEnable
+}
+
 dependencies {
     compileOnly project(':bukkit-api')
     compileOnly project(':runtime-core')
+    failedEnableCompileOnly project(':bukkit-api')
+    failedEnableCompileOnly project(':runtime-core')
+}
+
+tasks.register('failedEnableJar', Jar) {
+    archiveBaseName = 'AtlasHybridFailedEnableTestPlugin'
+    from sourceSets.failedEnable.output
+    manifest { attributes('Implementation-Version': project.version) }
 }
 
 jar {

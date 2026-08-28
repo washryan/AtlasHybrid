@@ -1,0 +1,219 @@
+package dev.atlashybrid.runtime.event;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import dev.atlashybrid.runtime.permission.AtlasPermissionRegistry;
+import dev.atlashybrid.runtime.permission.PermissionProviderRegistry;
+import dev.atlashybrid.runtime.service.AtlasServicesManager;
+import java.io.File;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.logging.Handler;
+import java.util.logging.LogRecord;
+import java.util.logging.Logger;
+import org.bukkit.Server;
+import org.bukkit.command.Command;
+import org.bukkit.command.CommandSender;
+import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.event.Cancellable;
+import org.bukkit.event.Event;
+import org.bukkit.event.EventException;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
+import org.bukkit.event.HandlerList;
+import org.bukkit.event.Listener;
+import org.bukkit.permissions.Permission;
+import org.bukkit.permissions.PermissionAttachment;
+import org.bukkit.permissions.PermissionAttachmentInfo;
+import org.bukkit.plugin.Plugin;
+import org.bukkit.plugin.PluginDescriptionFile;
+import org.bukkit.plugin.RegisteredListener;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
+
+class EventApiTest {
+    private final CapturingHandler logs = new CapturingHandler();
+    private final AtlasPluginManager manager = manager();
+    private final TestPlugin plugin = new TestPlugin();
+
+    @AfterEach
+    void cleanup() {
+        HandlerList.unregisterAll();
+    }
+
+    @Test
+    void eventExecutorIsInvokedExactlyOnce() {
+        AtomicInteger calls = new AtomicInteger();
+        Listener listener = new Listener() { };
+        manager.registerEvent(TestEvent.class, listener, EventPriority.NORMAL,
+            (registered, event) -> {
+                assertEquals(listener, registered);
+                assertInstanceOf(TestEvent.class, event);
+                calls.incrementAndGet();
+            }, plugin);
+        manager.callEvent(new TestEvent());
+        assertEquals(1, calls.get());
+    }
+
+    @Test
+    void dispatchUsesBukkitPriorityOrderAndRegistrationOrderWithinSlot() {
+        List<String> order = new ArrayList<>();
+        register(order, "monitor", EventPriority.MONITOR);
+        register(order, "normal-a", EventPriority.NORMAL);
+        register(order, "lowest", EventPriority.LOWEST);
+        register(order, "highest", EventPriority.HIGHEST);
+        register(order, "low", EventPriority.LOW);
+        register(order, "normal-b", EventPriority.NORMAL);
+        register(order, "high", EventPriority.HIGH);
+        manager.callEvent(new TestEvent());
+        assertEquals(List.of("lowest", "low", "normal-a", "normal-b", "high", "highest", "monitor"), order);
+    }
+
+    @Test
+    void ignoreCancelledSkipsOnlyOptedInListener() {
+        AtomicInteger ignored = new AtomicInteger();
+        AtomicInteger received = new AtomicInteger();
+        Listener listener = new Listener() { };
+        manager.registerEvent(TestEvent.class, listener, EventPriority.NORMAL,
+            (registered, event) -> ignored.incrementAndGet(), plugin, true);
+        manager.registerEvent(TestEvent.class, listener, EventPriority.NORMAL,
+            (registered, event) -> received.incrementAndGet(), plugin, false);
+        TestEvent event = new TestEvent();
+        event.setCancelled(true);
+        manager.callEvent(event);
+        assertEquals(0, ignored.get());
+        assertEquals(1, received.get());
+    }
+
+    @Test
+    void registeredExecutorRejectsWrongEventTypeClearly() {
+        manager.registerEvent(TestEvent.class, new Listener() { }, EventPriority.NORMAL,
+            (registered, event) -> { }, plugin);
+        RegisteredListener registered = TestEvent.HANDLERS.getRegisteredListeners()[0];
+        EventException failure = assertThrows(EventException.class, () -> registered.callEvent(new OtherEvent()));
+        assertInstanceOf(IllegalArgumentException.class, failure.getCause());
+        assertTrue(failure.getCause().getMessage().contains(TestEvent.class.getName()));
+    }
+
+    @Test
+    void executorFailureIsLoggedWithStructuredContextAndDoesNotStopDispatch() {
+        AtomicInteger later = new AtomicInteger();
+        manager.registerEvent(TestEvent.class, new NamedListener(), EventPriority.NORMAL,
+            (registered, event) -> { throw new EventException(new IllegalStateException("boom")); }, plugin);
+        manager.registerEvent(TestEvent.class, new Listener() { }, EventPriority.HIGH,
+            (registered, event) -> later.incrementAndGet(), plugin);
+        manager.callEvent(new TestEvent());
+        assertEquals(1, later.get());
+        LogRecord record = logs.records.get(0);
+        assertTrue(record.getMessage().contains("[AtlasHybrid Event]"));
+        assertTrue(record.getMessage().contains("Plugin: TestPlugin"));
+        assertTrue(record.getMessage().contains("Event: TestEvent"));
+        assertTrue(record.getMessage().contains("Listener: " + NamedListener.class.getName()));
+        assertTrue(record.getMessage().contains("Status: EXECUTION_FAILED"));
+        assertInstanceOf(EventException.class, record.getThrown());
+    }
+
+    @Test
+    void unregisterListenerAndPluginRemoveOwnedRegistrations() {
+        AtomicInteger calls = new AtomicInteger();
+        Listener first = new Listener() { };
+        Listener second = new Listener() { };
+        manager.registerEvent(TestEvent.class, first, EventPriority.NORMAL,
+            (registered, event) -> calls.incrementAndGet(), plugin);
+        manager.registerEvent(TestEvent.class, second, EventPriority.NORMAL,
+            (registered, event) -> calls.incrementAndGet(), plugin);
+        HandlerList.unregisterAll(first);
+        manager.callEvent(new TestEvent());
+        assertEquals(1, calls.get());
+        HandlerList.unregisterAll(plugin);
+        manager.callEvent(new TestEvent());
+        assertEquals(1, calls.get());
+    }
+
+    @Test
+    void annotationRegistrationUsesTheSameExecutorPath() {
+        AnnotatedListener listener = new AnnotatedListener();
+        manager.registerEvents(listener, plugin);
+        manager.callEvent(new TestEvent());
+        assertEquals(1, listener.calls);
+    }
+
+    @Test
+    void cleanupAllowsCleanRegistrationOnRestart() {
+        AtomicInteger calls = new AtomicInteger();
+        Listener listener = new Listener() { };
+        manager.registerEvent(TestEvent.class, listener, EventPriority.NORMAL,
+            (registered, event) -> calls.incrementAndGet(), plugin);
+        manager.cleanupPluginResources(plugin);
+        manager.registerEvent(TestEvent.class, listener, EventPriority.NORMAL,
+            (registered, event) -> calls.incrementAndGet(), plugin);
+        manager.callEvent(new TestEvent());
+        assertEquals(1, calls.get());
+    }
+
+    private void register(List<String> order, String value, EventPriority priority) {
+        manager.registerEvent(TestEvent.class, new Listener() { }, priority,
+            (registered, event) -> order.add(value), plugin);
+    }
+
+    private AtlasPluginManager manager() {
+        Logger logger = Logger.getLogger("event-test-" + System.identityHashCode(this));
+        logger.setUseParentHandlers(false);
+        logger.addHandler(logs);
+        return new AtlasPluginManager(logger, new AtlasPermissionRegistry(),
+            new PermissionProviderRegistry(logger), new AtlasServicesManager());
+    }
+
+    private static final class TestEvent extends Event implements Cancellable {
+        private static final HandlerList HANDLERS = new HandlerList();
+        private boolean cancelled;
+        @Override public HandlerList getHandlers() { return HANDLERS; }
+        public static HandlerList getHandlerList() { return HANDLERS; }
+        @Override public boolean isCancelled() { return cancelled; }
+        @Override public void setCancelled(boolean cancelled) { this.cancelled = cancelled; }
+    }
+
+    private static final class OtherEvent extends Event {
+        private static final HandlerList HANDLERS = new HandlerList();
+        @Override public HandlerList getHandlers() { return HANDLERS; }
+        public static HandlerList getHandlerList() { return HANDLERS; }
+    }
+
+    private static final class NamedListener implements Listener { }
+
+    private static final class AnnotatedListener implements Listener {
+        private int calls;
+        @EventHandler public void onTest(TestEvent event) { calls++; }
+    }
+
+    private static final class CapturingHandler extends Handler {
+        private final List<LogRecord> records = new ArrayList<>();
+        @Override public void publish(LogRecord record) { records.add(record); }
+        @Override public void flush() { }
+        @Override public void close() { }
+    }
+
+    private static final class TestPlugin implements Plugin {
+        private final PluginDescriptionFile description = new PluginDescriptionFile(
+            "TestPlugin", "1", "test.Plugin", null, null, List.of(), List.of(), List.of(), Set.of());
+        @Override public String getName() { return description.getName(); }
+        @Override public PluginDescriptionFile getDescription() { return description; }
+        @Override public Server getServer() { return null; }
+        @Override public java.util.logging.Logger getLogger() { return Logger.getAnonymousLogger(); }
+        @Override public File getDataFolder() { return new File("."); }
+        @Override public FileConfiguration getConfig() { return null; }
+        @Override public void reloadConfig() { }
+        @Override public void saveDefaultConfig() { }
+        @Override public boolean isEnabled() { return true; }
+        @Override public void onLoad() { }
+        @Override public void onEnable() { }
+        @Override public void onDisable() { }
+        @Override public boolean onCommand(CommandSender sender, Command command, String label, String[] args) { return false; }
+        @Override public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) { return null; }
+    }
+}

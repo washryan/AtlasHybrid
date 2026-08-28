@@ -2,12 +2,19 @@ package org.bukkit.plugin;
 
 import java.util.Set;
 import org.bukkit.event.Event;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.permissions.Permissible;
 import org.bukkit.permissions.Permission;
 
 public interface PluginManager {
     void registerEvents(Listener listener, Plugin plugin);
+
+    void registerEvent(Class<? extends Event> event, Listener listener, EventPriority priority,
+                       EventExecutor executor, Plugin plugin);
+
+    void registerEvent(Class<? extends Event> event, Listener listener, EventPriority priority,
+                       EventExecutor executor, Plugin plugin, boolean ignoreCancelled);
 
     void callEvent(Event event);
 
