@@ -25,6 +25,8 @@ import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.plugin.java.JavaPluginBootstrap;
+import org.bukkit.plugin.java.PluginBootstrapPhaseException;
 
 public final class PluginRuntime implements AutoCloseable {
     private static final List<Class<? extends Event>> KNOWN_EVENTS = List.of(PlayerJoinEvent.class, PlayerQuitEvent.class, BlockBreakEvent.class);
@@ -75,7 +77,7 @@ public final class PluginRuntime implements AutoCloseable {
                 loaded.add(plugin);
                 byName.put(key(candidate.metadata().name()), plugin);
             } catch (Throwable throwable) {
-                reportLinkage(candidate.metadata().name(), throwable);
+                reportCompatibilityFailure(candidate.metadata().name(), throwable);
                 logger.log(Level.SEVERE, "Failed to load plugin " + candidate.metadata().name(), throwable);
             }
         }
@@ -86,18 +88,24 @@ public final class PluginRuntime implements AutoCloseable {
         Stream.concat(candidate.metadata().depend().stream(), candidate.metadata().softDepend().stream())
             .map(name -> byName.get(key(name))).filter(java.util.Objects::nonNull).map(LoadedPlugin::classLoader).forEach(dependencies::add);
         URL jarUrl = candidate.jar().toUri().toURL();
-        AtlasPluginClassLoader classLoader = new AtlasPluginClassLoader(jarUrl, apiClassLoader, dependencies);
+        Path dataPath = candidate.jar().getParent().resolve(candidate.metadata().name());
+        org.bukkit.plugin.PluginDescriptionFile description = candidate.metadata().toDescription();
+        Logger pluginLogger = Logger.getLogger("AtlasHybrid.Plugin." + candidate.metadata().name());
+        JavaPluginBootstrap.Context bootstrapContext = new JavaPluginBootstrap.Context(
+            server, description, dataPath.toFile(), pluginLogger);
+        AtlasPluginClassLoader classLoader = new AtlasPluginClassLoader(
+            jarUrl, apiClassLoader, dependencies, bootstrapContext);
         JavaPlugin plugin = null;
         try {
-            Class<?> mainClass = Class.forName(candidate.metadata().main(), true, classLoader);
-            if (!JavaPlugin.class.isAssignableFrom(mainClass)) throw new IllegalArgumentException("Main class does not extend JavaPlugin: " + mainClass.getName());
-            @SuppressWarnings("unchecked")
-            Constructor<? extends JavaPlugin> constructor = ((Class<? extends JavaPlugin>) mainClass).getDeclaredConstructor();
-            constructor.setAccessible(true);
-            plugin = constructor.newInstance();
-            Path dataPath = candidate.jar().getParent().resolve(candidate.metadata().name());
-            Logger pluginLogger = Logger.getLogger("AtlasHybrid.Plugin." + candidate.metadata().name());
-            plugin.atlasInitialize(server, candidate.metadata().toDescription(), dataPath.toFile(), pluginLogger);
+            try (AtlasPluginClassLoader.ConstructionScope ignored = classLoader.beginConstruction()) {
+                Class<?> mainClass = Class.forName(candidate.metadata().main(), true, classLoader);
+                if (!JavaPlugin.class.isAssignableFrom(mainClass)) throw new IllegalArgumentException("Main class does not extend JavaPlugin: " + mainClass.getName());
+                @SuppressWarnings("unchecked")
+                Constructor<? extends JavaPlugin> constructor = ((Class<? extends JavaPlugin>) mainClass).getDeclaredConstructor();
+                constructor.setAccessible(true);
+                plugin = constructor.newInstance();
+            }
+            plugin.atlasInitialize(server, description, dataPath.toFile(), pluginLogger);
             pluginManager.addPlugin(plugin);
             for (String commandName : candidate.metadata().commands()) {
                 org.bukkit.command.PluginCommand command = commands.register(commandName, plugin);
@@ -129,7 +137,7 @@ public final class PluginRuntime implements AutoCloseable {
                 }
                 logger.info("Enabled plugin " + item.plugin().getDescription().getFullName());
             } catch (Throwable throwable) {
-                reportLinkage(item.plugin().getName(), throwable);
+                reportCompatibilityFailure(item.plugin().getName(), throwable);
                 logger.log(Level.SEVERE, "Failed to enable plugin " + item.plugin().getName(), throwable);
                 scheduler.cancelTasks(item.plugin());
                 commands.unregister(item.plugin());
@@ -148,7 +156,7 @@ public final class PluginRuntime implements AutoCloseable {
             if (plugin.isEnabled()) {
                 try (CompatibilityRuntime.Scope ignored = CompatibilityRuntime.enter(plugin.getName())) { plugin.atlasSetEnabled(false); }
                 catch (Throwable throwable) {
-                    reportLinkage(plugin.getName(), throwable);
+                    reportCompatibilityFailure(plugin.getName(), throwable);
                     logger.log(Level.SEVERE, "Failed to disable plugin " + plugin.getName(), throwable);
                 }
             }
@@ -171,8 +179,14 @@ public final class PluginRuntime implements AutoCloseable {
     public List<LoadedPlugin> loadedPlugins() { return List.copyOf(loaded); }
     private static String key(String value) { return value.toLowerCase(Locale.ROOT); }
 
-    private static void reportLinkage(String plugin, Throwable throwable) {
+    private static void reportCompatibilityFailure(String plugin, Throwable throwable) {
         try (CompatibilityRuntime.Scope ignored = CompatibilityRuntime.enter(plugin)) {
+            for (Throwable current = throwable; current != null; current = current.getCause()) {
+                if (current instanceof PluginBootstrapPhaseException phaseFailure) {
+                    CompatibilityRuntime.availableLater(phaseFailure.api(), phaseFailure.phase());
+                    return;
+                }
+            }
             CompatibilityRuntime.reportLinkageFailure(throwable);
         }
     }

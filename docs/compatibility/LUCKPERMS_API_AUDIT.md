@@ -39,10 +39,10 @@ Risk is classified as `TRIVIAL`, `CORE_API`, `ARCHITECTURAL`, or `BLOCKED`.
 
 | Domain | Representative dependencies | AtlasHybrid | Risk | Finding |
 |---|---|---:|---:|---|
-| Plugin bootstrap/lifecycle | `JavaPlugin`, `Plugin`, `PluginDescriptionFile`, STARTUP load, `onLoad/onEnable/onDisable` | PARTIAL | CORE_API | Basic lifecycle exists, but the loader constructor links additional missing Bukkit types before `onLoad`. |
+| Plugin bootstrap/lifecycle | `JavaPlugin`, `Plugin`, `PluginDescriptionFile`, STARTUP load, `onLoad/onEnable/onDisable` | SUPPORTED for observed construction | CORE_API | Classloader-owned bootstrap context now provides stable metadata, server, data folder and logger before subclass construction; raw boot proceeds to command API linkage. |
 | Console and sender hierarchy | `ConsoleCommandSender`, `RemoteConsoleCommandSender`, `BlockCommandSender`, `ProxiedCommandSender`, conversations, permission methods | MISSING | CORE_API | The first raw-boot failure is `ConsoleCommandSender`. Adding only this interface would not make startup viable. |
 | Server facade | name/version/Bukkit version, online/offline player lookup, operators, scheduler, plugin manager, services, messenger | PARTIAL | CORE_API | AtlasHybrid has a narrow `Server`; offline players, operators, services and messenger are absent. |
-| Commands | `PluginCommand`, `TabExecutor`, `CommandMap`, sender permission checks, server command events | PARTIAL | CORE_API | Basic command execution exists. Tab completion, permission-aware senders, command events and the command map contract are missing. |
+| Commands | `PluginCommand`, `TabExecutor`, `CommandMap`, sender permission checks, server command events | PARTIAL | CORE_API | Basic command execution exists. Raw boot #3 first stops at missing `TabExecutor`; tab completion, command events and the command map contract remain absent. |
 | Configuration | `YamlConfiguration`, `ConfigurationSection`, typed maps/lists, section traversal | PARTIAL | CORE_API | Current deterministic YAML supports tested scalar/list/location paths, not Bukkit's section model required by `BukkitConfigAdapter`. |
 | Events | pre-login/login/quit, join, world/game-mode change, command, plugin enable/disable, server command | PARTIAL | CORE_API | Join/quit exist; most LuckPerms lifecycle, context and command events do not. Async pre-login also needs a real thread-safety contract. |
 | Scheduler | Bukkit sync scheduling plus LuckPerms' own scheduled executor and `ForkJoinPool` | PARTIAL | CORE_API | Existing sync bridge is narrow. LuckPerms' async pool is real and has explicit termination, but a successful lifecycle cannot be reached to validate it. |
@@ -189,15 +189,34 @@ emulates/transforms the private CraftBukkit path.
 After the public permission, console and services contracts were implemented,
 raw boot #2 no longer failed on `ConsoleCommandSender`. LuckPerms' outer
 `BukkitLoaderPlugin` constructor loaded and reflectively instantiated
-`LPBukkitBootstrap`. That nested `JavaPlugin` called `getLogger()` at constructor
-line 104 before AtlasHybrid's post-construction `atlasInitialize` step could
-initialize it, producing `IllegalStateException`.
+`LPBukkitBootstrap`. This helper is not a second `JavaPlugin`; it called
+`getLogger()` on the outer loader plugin at line 104 before AtlasHybrid's
+post-construction `atlasInitialize` step, producing `IllegalStateException`.
 
 | Item | Classification |
 |---|---|
 | Symbol/path | `LPBukkitBootstrap.<init>` -> `JavaPlugin#getLogger` |
-| Need | Logger/server/plugin construction context must exist while a nested `JavaPlugin` constructor executes |
+| Need | Logger/server/plugin construction context must exist while the main `JavaPlugin` constructor executes jar-in-jar bootstrap code |
 | Public API? | `JavaPlugin#getLogger` is public; the timing and classloader-driven initialization shape are implementation/lifecycle semantics |
 | CraftBukkit internals? | No; failure occurs before `SimplePluginManager` maps or `CraftHumanEntity#perm` injection |
 | Category | **ARCHITECTURAL** |
 | Phase 9.2 action | Stop and document; no cascading loader or LuckPerms-specific implementation |
+
+## Phase 9.3 observed loader boundary
+
+AtlasHybrid now associates parsed metadata and stable runtime objects with the
+plugin classloader before construction. A short thread-local activation is
+owned and validated by that classloader and cleared in `finally`. This let raw
+boot #3 pass both `loader.getLogger()` and `loader.getServer()` in
+`LPBukkitBootstrap.<init>` without a LuckPerms-specific branch.
+
+The next first failure occurs while line 110 creates `LPBukkitPlugin`:
+
+| Item | Classification |
+|---|---|
+| Symbol/path | `LPBukkitBootstrap.<init>:110` -> define `LPBukkitPlugin` -> `org.bukkit.command.TabExecutor` |
+| Diagnostic | `Missing API: org.bukkit.command.TabExecutor`, `Status: NOT_IMPLEMENTED` |
+| Public API? | Yes, normal Bukkit command/tab-completion interface |
+| CraftBukkit internals? | No; the later injection paths have not been reached |
+| Category | **CORE_API** |
+| Phase 9.3 action | Stop and document; do not implement the next symbol or continue the cascade |

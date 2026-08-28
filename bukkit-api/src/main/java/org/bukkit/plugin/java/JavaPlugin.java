@@ -22,6 +22,15 @@ public abstract class JavaPlugin implements Plugin {
     private FileConfiguration config;
     private boolean enabled;
     private boolean initialized;
+    private boolean bootstrapBound;
+
+    protected JavaPlugin() {
+        JavaPluginBootstrap.Context context = JavaPluginBootstrap.findFor(getClass().getClassLoader());
+        if (context != null) {
+            bind(context.server(), context.description(), context.dataFolder(), context.logger());
+            bootstrapBound = true;
+        }
+    }
 
     public final synchronized void atlasInitialize(
         Server server,
@@ -32,10 +41,14 @@ public abstract class JavaPlugin implements Plugin {
         if (initialized) {
             throw new IllegalStateException("Plugin is already initialized");
         }
-        this.server = Objects.requireNonNull(server, "server");
-        this.description = Objects.requireNonNull(description, "description");
-        this.dataFolder = Objects.requireNonNull(dataFolder, "dataFolder");
-        this.logger = Objects.requireNonNull(logger, "logger");
+        if (bootstrapBound) {
+            if (this.server != server || this.description != description
+                || !this.dataFolder.equals(dataFolder) || this.logger != logger) {
+                throw new IllegalStateException("Final plugin context does not match its bootstrap context");
+            }
+        } else {
+            bind(server, description, dataFolder, logger);
+        }
         this.initialized = true;
     }
 
@@ -66,20 +79,21 @@ public abstract class JavaPlugin implements Plugin {
     @Override public void onDisable() { }
 
     @Override public final String getName() { return getDescription().getName(); }
-    @Override public final PluginDescriptionFile getDescription() { requireInitialized(); return description; }
-    @Override public final Server getServer() { requireInitialized(); return server; }
-    @Override public final Logger getLogger() { requireInitialized(); return logger; }
-    @Override public final File getDataFolder() { requireInitialized(); return dataFolder; }
+    @Override public final PluginDescriptionFile getDescription() { requireContext("JavaPlugin#getDescription"); return description; }
+    @Override public final Server getServer() { requireContext("JavaPlugin#getServer"); return server; }
+    @Override public final Logger getLogger() { requireContext("JavaPlugin#getLogger"); return logger; }
+    @Override public final File getDataFolder() { requireContext("JavaPlugin#getDataFolder"); return dataFolder; }
     @Override public final boolean isEnabled() { return enabled; }
 
     public final PluginCommand getCommand(String name) {
+        requireInitialized("JavaPlugin#getCommand");
         PluginCommand command = getServer().getPluginCommand(name);
         return command != null && command.getPlugin() == this ? command : null;
     }
 
     @Override
     public final synchronized FileConfiguration getConfig() {
-        requireInitialized();
+        requireContext("JavaPlugin#getConfig");
         if (config == null) {
             reloadConfig();
         }
@@ -88,13 +102,13 @@ public abstract class JavaPlugin implements Plugin {
 
     @Override
     public final synchronized void reloadConfig() {
-        requireInitialized();
+        requireContext("JavaPlugin#reloadConfig");
         config = YamlConfiguration.loadConfiguration(dataFolder.toPath().resolve("config.yml"));
     }
 
     @Override
     public final void saveDefaultConfig() {
-        requireInitialized();
+        requireContext("JavaPlugin#saveDefaultConfig");
         File target = new File(dataFolder, "config.yml");
         if (target.isFile()) {
             return;
@@ -112,14 +126,31 @@ public abstract class JavaPlugin implements Plugin {
     }
 
     public final synchronized void saveConfig() {
-        requireInitialized();
+        requireContext("JavaPlugin#saveConfig");
         if (config == null) return;
         YamlConfiguration.saveConfiguration(config, dataFolder.toPath().resolve("config.yml"));
     }
 
+    private void bind(Server server, PluginDescriptionFile description, File dataFolder, Logger logger) {
+        this.server = Objects.requireNonNull(server, "server");
+        this.description = Objects.requireNonNull(description, "description");
+        this.dataFolder = Objects.requireNonNull(dataFolder, "dataFolder");
+        this.logger = Objects.requireNonNull(logger, "logger");
+    }
+
+    private void requireContext(String api) {
+        if (!initialized && !bootstrapBound) {
+            throw new PluginBootstrapPhaseException(api, "CONSTRUCTION");
+        }
+    }
+
     private void requireInitialized() {
+        requireInitialized("JavaPlugin lifecycle");
+    }
+
+    private void requireInitialized(String api) {
         if (!initialized) {
-            throw new IllegalStateException("Plugin has not been initialized by AtlasHybrid");
+            throw new PluginBootstrapPhaseException(api, "CONSTRUCTION");
         }
     }
 }

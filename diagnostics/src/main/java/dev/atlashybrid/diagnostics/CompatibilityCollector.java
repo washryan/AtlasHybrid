@@ -34,6 +34,19 @@ public final class CompatibilityCollector {
         return new CompatibilityException(diagnostic);
     }
 
+    public void availableLater(String plugin, String api, String phase) {
+        CompatibilityDiagnostic diagnostic = new CompatibilityDiagnostic(
+            Instant.now(), plugin, api, "plugin-bootstrap", CompatibilityStatus.AVAILABLE_LATER,
+            "Diagnostic: PLUGIN_BOOTSTRAP_PHASE; Phase: " + phase);
+        diagnostics.add(diagnostic);
+        logger.warning("[AtlasHybrid Compatibility]\n"
+            + "Plugin: " + plugin + "\n"
+            + "API: " + api + "\n"
+            + "Diagnostic: PLUGIN_BOOTSTRAP_PHASE\n"
+            + "Phase: " + phase + "\n"
+            + "Status: AVAILABLE_LATER");
+    }
+
     public void missing(String plugin, String api, Throwable failure) {
         CompatibilityDiagnostic diagnostic = new CompatibilityDiagnostic(
             Instant.now(), plugin, api, "runtime-linkage", CompatibilityStatus.NOT_IMPLEMENTED, failure.getClass().getName());

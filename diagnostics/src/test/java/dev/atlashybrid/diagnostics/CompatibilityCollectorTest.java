@@ -44,4 +44,20 @@ class CompatibilityCollectorTest {
         assertTrue(messages.get(0).contains("Runtime: 0.1.0-alpha"));
         assertEquals("'void example.Plugin.saveConfig()'", original.getMessage());
     }
+
+    @Test
+    void distinguishesBootstrapPhaseFromMissingApi() {
+        CompatibilityCollector collector = new CompatibilityCollector(Logger.getAnonymousLogger());
+        CompatibilityRuntime.install(collector);
+        try (CompatibilityRuntime.Scope ignored = CompatibilityRuntime.enter("EarlyPlugin")) {
+            CompatibilityRuntime.availableLater("JavaPlugin#getCommand", "CONSTRUCTION");
+        } finally {
+            CompatibilityRuntime.clear();
+        }
+        CompatibilityDiagnostic diagnostic = collector.diagnostics().get(0);
+        assertEquals(CompatibilityStatus.AVAILABLE_LATER, diagnostic.status());
+        assertEquals("plugin-bootstrap", diagnostic.module());
+        assertTrue(diagnostic.detail().contains("PLUGIN_BOOTSTRAP_PHASE"));
+        assertTrue(diagnostic.detail().contains("CONSTRUCTION"));
+    }
 }

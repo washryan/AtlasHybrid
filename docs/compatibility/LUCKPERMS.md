@@ -122,19 +122,45 @@ Plugin has not been initialized by AtlasHybrid
     at me.lucko.luckperms.bukkit.LPBukkitBootstrap.<init>(...:104)
 ```
 
-Classification: **ARCHITECTURAL**. `LPBukkitBootstrap` is a nested
-`JavaPlugin` created reflectively by LuckPerms' jar-in-jar loader and reads its
-logger during construction. AtlasHybrid currently initializes the discovered
-main `JavaPlugin` only after its constructor returns. Supporting this pattern
-requires a generic decision for Bukkit `JavaPlugin` construction context and
-plugin classloader lifecycle. The observed failure is not a missing public API
-symbol and does not yet enter the later CraftBukkit `CraftHumanEntity#perm`
-injection path.
+Classification: **ARCHITECTURAL**. More exact source review established that
+`LPBukkitBootstrap` is not a second `JavaPlugin`; it is a jar-in-jar helper that
+receives the outer `BukkitLoaderPlugin` and calls that main plugin's
+`getLogger()` during its constructor. AtlasHybrid initialized the main instance
+only after its constructor returned. The observed failure was not a missing
+public API symbol and occurred before CraftBukkit permission injection.
 
 Per the Phase 9.2 stop gate, AtlasHybrid does not implement that next loader
 architecture here. LuckPerms remains **BLOCKED** while compatibility continues
 to be developed; the implemented Permission Core is not a LuckPerms support
 claim. The original stack trace remains present in the raw-boot log.
+
+## Phase 9.3 raw boot #3
+
+Phase 9.3 added a generic, classloader-owned bootstrap context. The official,
+unchanged LuckPerms artifact passed the previous construction boundary:
+`LPBukkitBootstrap` successfully obtained both the logger (line 104) and server
+facade (line 110) from its outer `BukkitLoaderPlugin` during construction.
+
+The next first failure is:
+
+```text
+[AtlasHybrid Compatibility]
+Plugin: LuckPerms
+Missing API: org.bukkit.command.TabExecutor
+Status: NOT_IMPLEMENTED
+Runtime: 0.1.0-alpha
+
+Caused by: java.lang.NoClassDefFoundError: org/bukkit/command/TabExecutor
+    at me.lucko.luckperms.bukkit.LPBukkitBootstrap.<init>(LPBukkitBootstrap.java:110)
+Caused by: java.lang.ClassNotFoundException: org.bukkit.command.TabExecutor
+```
+
+`LPBukkitBootstrap` constructs `LPBukkitPlugin` at line 110; defining that class
+links Bukkit's `TabExecutor`. Classification: **CORE_API**. This is a normal
+public Bukkit command interface, not CraftBukkit/NMS. Per the raw-boot stop gate,
+it was recorded but not implemented, and no later dependency was pursued. The
+summary was one discovered plugin, zero loaded and one unsupported; the server
+then shut down cleanly.
 
 ## AtlasHybrid regression evidence
 

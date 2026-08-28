@@ -20,10 +20,15 @@ import org.bukkit.permissions.PermissionDefault;
 import org.bukkit.plugin.ServicePriority;
 
 public final class AtlasHybridTestPlugin extends JavaPlugin implements Listener, CommandExecutor {
+    private final java.util.logging.Logger earlyLogger = getLogger();
     private org.bukkit.entity.Player sessionPlayer;
 
     @Override
     public void onLoad() {
+        if (earlyLogger != getLogger()) {
+            throw new IllegalStateException("JavaPlugin logger identity changed after construction");
+        }
+        earlyLogger.info("[AtlasHybridIntegration] EARLY_LOGGER_OK");
         getLogger().info("[AtlasHybridTestPlugin] onLoad");
     }
 

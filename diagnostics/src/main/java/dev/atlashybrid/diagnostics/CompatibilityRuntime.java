@@ -43,6 +43,13 @@ public final class CompatibilityRuntime {
         return true;
     }
 
+    public static void availableLater(String api, String phase) {
+        CompatibilityCollector current = collector;
+        if (current != null) {
+            current.availableLater(Objects.requireNonNullElse(CURRENT_PLUGIN.get(), "UNKNOWN"), api, phase);
+        }
+    }
+
     private static Throwable findLinkageFailure(Throwable throwable) {
         for (Throwable current = throwable; current != null; current = current.getCause()) {
             if (current instanceof NoSuchMethodError || current instanceof AbstractMethodError

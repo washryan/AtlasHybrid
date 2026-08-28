@@ -3,8 +3,10 @@ package dev.atlashybrid.loader;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.util.List;
+import java.util.Objects;
+import org.bukkit.plugin.java.JavaPluginBootstrap;
 
-public final class AtlasPluginClassLoader extends URLClassLoader {
+public final class AtlasPluginClassLoader extends URLClassLoader implements JavaPluginBootstrap.Provider {
     static { registerAsParallelCapable(); }
 
     private static final List<String> PARENT_FIRST = List.of(
@@ -14,10 +16,45 @@ public final class AtlasPluginClassLoader extends URLClassLoader {
         "net.minecraft.", "net.minecraftforge."
     );
     private final List<AtlasPluginClassLoader> dependencies;
+    private final JavaPluginBootstrap.Context bootstrapContext;
+    private final ThreadLocal<Integer> constructionDepth = new ThreadLocal<>();
 
-    public AtlasPluginClassLoader(URL jar, ClassLoader parent, List<AtlasPluginClassLoader> dependencies) {
+    public AtlasPluginClassLoader(
+        URL jar,
+        ClassLoader parent,
+        List<AtlasPluginClassLoader> dependencies,
+        JavaPluginBootstrap.Context bootstrapContext
+    ) {
         super(new URL[] { jar }, parent);
         this.dependencies = List.copyOf(dependencies);
+        this.bootstrapContext = Objects.requireNonNull(bootstrapContext, "bootstrapContext");
+    }
+
+    ConstructionScope beginConstruction() {
+        Integer current = constructionDepth.get();
+        constructionDepth.set(current == null ? 1 : current + 1);
+        return () -> {
+            Integer depth = constructionDepth.get();
+            if (depth == null || depth <= 1) constructionDepth.remove();
+            else constructionDepth.set(depth - 1);
+        };
+    }
+
+    @Override
+    public JavaPluginBootstrap.Context atlasBootstrapContext(ClassLoader requestingClassLoader) {
+        if (constructionDepth.get() == null || !owns(requestingClassLoader)) return null;
+        return bootstrapContext;
+    }
+
+    boolean hasActiveConstructionContext() {
+        return constructionDepth.get() != null;
+    }
+
+    private boolean owns(ClassLoader requestingClassLoader) {
+        for (ClassLoader current = requestingClassLoader; current != null; current = current.getParent()) {
+            if (current == this) return true;
+        }
+        return false;
     }
 
     @Override
@@ -54,5 +91,10 @@ public final class AtlasPluginClassLoader extends URLClassLoader {
 
     private static boolean isParentFirst(String name) {
         return PARENT_FIRST.stream().anyMatch(name::startsWith);
+    }
+
+    @FunctionalInterface
+    interface ConstructionScope extends AutoCloseable {
+        @Override void close();
     }
 }

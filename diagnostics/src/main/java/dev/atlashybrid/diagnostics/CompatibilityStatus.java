@@ -2,6 +2,7 @@ package dev.atlashybrid.diagnostics;
 
 public enum CompatibilityStatus {
     SUPPORTED,
+    AVAILABLE_LATER,
     NOT_IMPLEMENTED,
     NMS_NOT_SUPPORTED,
     PAPER_API_NOT_SUPPORTED,
