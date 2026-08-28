@@ -154,6 +154,9 @@ class YamlConfigurationTest {
     private record ConfigServer(World world) implements Server {
         @Override public String getName() { return "test"; }
         @Override public String getVersion() { return "test"; }
+        @Override public java.util.Collection<? extends org.bukkit.entity.Player> getOnlinePlayers() { return java.util.List.of(); }
+        @Override public org.bukkit.entity.Player getPlayer(java.util.UUID id) { return null; }
+        @Override public org.bukkit.entity.Player getPlayerExact(String name) { return null; }
         @Override public String getBukkitVersion() { return "test"; }
         @Override public String getMinecraftVersion() { return "1.19.2"; }
         @Override public String getForgeVersion() { return "43.5.0"; }

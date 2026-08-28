@@ -5,10 +5,10 @@ import dev.atlashybrid.runtime.event.AtlasPluginManager;
 import dev.atlashybrid.runtime.scheduler.AtlasScheduler;
 import dev.atlashybrid.runtime.permission.AtlasPermissionRegistry;
 import dev.atlashybrid.runtime.permission.PermissionProviderRegistry;
+import dev.atlashybrid.runtime.player.PlayerSessionRegistry;
 import dev.atlashybrid.runtime.service.AtlasServicesManager;
-import java.util.Map;
+import java.util.Collection;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
@@ -19,6 +19,7 @@ import org.bukkit.Server;
 import org.bukkit.World;
 import org.bukkit.command.PluginCommand;
 import org.bukkit.command.ConsoleCommandSender;
+import org.bukkit.entity.Player;
 import org.bukkit.plugin.PluginManager;
 import org.bukkit.plugin.ServicesManager;
 import org.bukkit.scheduler.BukkitScheduler;
@@ -31,7 +32,7 @@ final class ForgeServerAdapter implements Server {
     private final AtlasPermissionRegistry permissions;
     private final PermissionProviderRegistry providers;
     private final AtlasServicesManager services;
-    private final Map<UUID, ForgePlayerAdapter> players = new ConcurrentHashMap<>();
+    private final PlayerSessionRegistry players = new PlayerSessionRegistry(player -> ((ForgePlayerAdapter) player).close());
     private final ForgeConsoleCommandSender console;
 
     ForgeServerAdapter(MinecraftServer minecraftServer, AtlasPluginManager pluginManager, AtlasScheduler scheduler, CommandRegistry commands,
@@ -48,6 +49,9 @@ final class ForgeServerAdapter implements Server {
 
     @Override public String getName() { return "AtlasHybrid"; }
     @Override public String getVersion() { return "AtlasHybrid " + AtlasHybridMod.VERSION + " (MC: " + getMinecraftVersion() + ", Forge: " + getForgeVersion() + ")"; }
+    @Override public Collection<? extends Player> getOnlinePlayers() { return players.onlinePlayers(); }
+    @Override public Player getPlayer(UUID id) { return players.getPlayer(id); }
+    @Override public Player getPlayerExact(String name) { return players.getPlayerExact(name); }
     @Override public String getBukkitVersion() { return "1.19.2-R0.1-ATLASHYBRID"; }
     @Override public String getMinecraftVersion() { return minecraftServer.getServerVersion(); }
     @Override public String getForgeVersion() { return ForgeVersion.getVersion(); }
@@ -72,7 +76,7 @@ final class ForgeServerAdapter implements Server {
     void initializePermissions() { console.initializePermissions(); }
 
     ForgePlayerAdapter player(net.minecraft.server.level.ServerPlayer player) {
-        return players.computeIfAbsent(player.getUUID(), ignored -> {
+        return (ForgePlayerAdapter) players.getOrRegister(player.getUUID(), player.getGameProfile().getName(), () -> {
             ForgePlayerAdapter adapter = new ForgePlayerAdapter(player, permissions, providers);
             adapter.initializePermissions();
             return adapter;
@@ -80,15 +84,13 @@ final class ForgeServerAdapter implements Server {
     }
 
     void disconnect(net.minecraft.server.level.ServerPlayer player) {
-        ForgePlayerAdapter adapter = players.remove(player.getUUID());
-        if (adapter != null) adapter.close();
+        players.remove(player.getUUID());
     }
 
     int permissionProviderCount() { return providers.size(); }
     int serviceCount() { return services.size(); }
 
     void close() {
-        for (ForgePlayerAdapter player : players.values()) player.close();
         players.clear();
         console.close();
     }

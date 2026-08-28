@@ -334,6 +334,9 @@ class PermissionCoreTest {
     }
 
     private record TestServer(PluginManager pluginManager, ServicesManager services, BukkitScheduler scheduler) implements Server {
+        @Override public java.util.Collection<? extends org.bukkit.entity.Player> getOnlinePlayers() { return java.util.List.of(); }
+        @Override public org.bukkit.entity.Player getPlayer(java.util.UUID id) { return null; }
+        @Override public org.bukkit.entity.Player getPlayerExact(String name) { return null; }
         @Override public String getName() { return "test"; }
         @Override public String getVersion() { return "test"; }
         @Override public String getBukkitVersion() { return "test"; }

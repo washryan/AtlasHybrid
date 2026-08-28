@@ -254,3 +254,27 @@ audience implementation then queried the server's online-player collection:
 | CraftBukkit internals? | No; the known later permissible/map injection paths have not been reached |
 | Category | **CORE_API** |
 | Phase 9.5 action | Stop and document; do not implement `Server#getOnlinePlayers` or continue the cascade |
+
+## Phase 9.6 observed loader boundary
+
+The session registry implements the Bukkit 1.19.2
+`Collection<? extends Player>` contract as immutable snapshots backed by real
+Forge player adapters. UUID and case-insensitive exact-name lookup resolve the
+same adapter. Registration occurs before join dispatch; removal and permission
+cleanup occur after quit dispatch and during shutdown.
+
+Source audit found direct LuckPerms uses of `getOnlinePlayers()` and
+`getPlayer(UUID)`, plus `getPlayerExact(String)` in the optional Vault path.
+`getOfflinePlayer(String/UUID)` is used by later username/UUID lookup methods,
+but raw boot #6 did not reach it, so OfflinePlayer remains deferred.
+
+| Item | Classification |
+|---|---|
+| Passed boundary | `BukkitAudiencesImpl.<init>:93` -> `Server#getOnlinePlayers()` |
+| New symbol/path | `BukkitAudiencesImpl.registerEvent:218` -> `org.bukkit.plugin.EventExecutor` |
+| Diagnostic | `Missing API: org.bukkit.plugin.EventExecutor`, `Status: NOT_IMPLEMENTED` |
+| Lifecycle phase | `BukkitLoaderPlugin.onEnable`, during Adventure audience event registration |
+| Public API? | Yes, normal Bukkit event dispatch interface |
+| CraftBukkit internals? | No; known later permission injection remains unreached |
+| Category | **CORE_API** |
+| Phase 9.6 action | Stop and document; do not add `EventExecutor` or continue the cascade |

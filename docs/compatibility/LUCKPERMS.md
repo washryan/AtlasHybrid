@@ -259,3 +259,46 @@ and `TAB_COMPLETION_OK` exactly once, WelcomeMessage and WarpPlugin `FULL`
 regressions, Permission Core, ServicesManager, JavaPlugin bootstrap and Command
 API checks, and two byte-identical clean builds. LuckPerms remains **BLOCKED**
 and unsupported pending later explicitly scoped work.
+
+## Phase 9.6 raw boot #6
+
+Phase 9.6 added a generic session-backed online-player collection plus UUID and
+exact-name lookup. The unchanged LuckPerms artifact passed the former
+`Server#getOnlinePlayers()` boundary. Adventure successfully iterated the empty
+startup snapshot and advanced from audience construction into event
+registration.
+
+The next first failure is:
+
+```text
+[AtlasHybrid Compatibility]
+Plugin: LuckPerms
+Missing API: org.bukkit.plugin.EventExecutor
+Status: NOT_IMPLEMENTED
+Runtime: 0.1.0-alpha
+
+java.lang.NoClassDefFoundError: org/bukkit/plugin/EventExecutor
+    at me.lucko.luckperms.lib.adventure.platform.bukkit.BukkitAudiencesImpl.registerEvent(BukkitAudiencesImpl.java:218)
+    at me.lucko.luckperms.lib.adventure.platform.bukkit.BukkitAudiencesImpl.<init>(BukkitAudiencesImpl.java:97)
+    at me.lucko.luckperms.bukkit.LPBukkitPlugin.setupSenderFactory(LPBukkitPlugin.java:113)
+    at me.lucko.luckperms.common.plugin.AbstractLuckPermsPlugin.enable(AbstractLuckPermsPlugin.java:155)
+    at me.lucko.luckperms.bukkit.LPBukkitBootstrap.onEnable(LPBukkitBootstrap.java:177)
+```
+
+Classification: **CORE_API**. `EventExecutor` is a normal public Bukkit event
+dispatch interface, not CraftBukkit, NMS, Paper or Mixin. Per the Phase 9.6 stop
+gate it is documented but not implemented. Offline-player lookup was audited
+and deferred because the observed startup path still did not invoke it.
+
+The phase passes `68/68` tests. The normal Forge proof emits
+`ONLINE_PLAYERS_OK` exactly once alongside all prior single-shot markers and
+zero `ERROR/FATAL`. WelcomeMessage and WarpPlugin remain `FULL`, including the
+complete Warp command/persistence probe. Clean builds A and B produce identical
+runtime, test-plugin and test-mod artifacts. The expected raw compatibility
+failure is one `ERROR` with no `FATAL`; Minecraft accepted `stop` and saved all
+dimensions, although LuckPerms-created worker state after failed enable kept the
+Gradle launch alive until the already-stopped process was interrupted.
+
+LuckPerms remains **BLOCKED** and unsupported. No `EventExecutor`, OfflinePlayer
+API, CraftBukkit shape or permission-injection workaround was added in this
+phase.

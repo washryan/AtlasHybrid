@@ -83,12 +83,26 @@ public final class AtlasHybridTestMod {
         LOGGER.info("[AtlasHybridIntegration] TAB_COMPLETION_OK");
 
         MinecraftForge.EVENT_BUS.post(new PlayerEvent.PlayerLoggedInEvent(player));
+        org.bukkit.Server bukkitServer = org.bukkit.Bukkit.getServer();
+        org.bukkit.entity.Player onlinePlayer = bukkitServer.getPlayer(player.getUUID());
+        if (bukkitServer.getOnlinePlayers().size() != 1
+            || onlinePlayer == null
+            || onlinePlayer != bukkitServer.getPlayerExact(player.getGameProfile().getName())
+            || onlinePlayer != bukkitServer.getOnlinePlayers().iterator().next()) {
+            throw new IllegalStateException("Online player registry did not expose a stable adapter");
+        }
         runExternalRegressionIfPresent(player);
         level.setBlockAndUpdate(position, Blocks.STONE.defaultBlockState());
         boolean destroyed = player.gameMode.destroyBlock(position);
         boolean blockStillPresent = level.getBlockState(position).is(Blocks.STONE);
         LOGGER.info("[AtlasHybridIntegration] BLOCK_BREAK_RESULT destroyed={} blockStillPresent={}", destroyed, blockStillPresent);
         MinecraftForge.EVENT_BUS.post(new PlayerEvent.PlayerLoggedOutEvent(player));
+        if (!bukkitServer.getOnlinePlayers().isEmpty()
+            || bukkitServer.getPlayer(player.getUUID()) != null
+            || bukkitServer.getPlayerExact(player.getGameProfile().getName()) != null) {
+            throw new IllegalStateException("Online player registry retained a disconnected player");
+        }
+        LOGGER.info("[AtlasHybridIntegration] ONLINE_PLAYERS_OK");
         channel.finishAndReleaseAll();
         LOGGER.info("[AtlasHybridIntegration] PLAYER_EVENTS_POSTED");
         LOGGER.info("[AtlasHybridIntegration] PROBE_END");
