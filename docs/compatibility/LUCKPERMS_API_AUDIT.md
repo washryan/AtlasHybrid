@@ -42,7 +42,7 @@ Risk is classified as `TRIVIAL`, `CORE_API`, `ARCHITECTURAL`, or `BLOCKED`.
 | Plugin bootstrap/lifecycle | `JavaPlugin`, `Plugin`, `PluginDescriptionFile`, STARTUP load, `onLoad/onEnable/onDisable` | SUPPORTED for observed construction | CORE_API | Classloader-owned bootstrap context now provides stable metadata, server, data folder and logger before subclass construction; raw boot proceeds to command API linkage. |
 | Console and sender hierarchy | `ConsoleCommandSender`, `RemoteConsoleCommandSender`, `BlockCommandSender`, `ProxiedCommandSender`, conversations, permission methods | MISSING | CORE_API | The first raw-boot failure is `ConsoleCommandSender`. Adding only this interface would not make startup viable. |
 | Server facade | name/version/Bukkit version, online/offline player lookup, operators, scheduler, plugin manager, services, messenger | PARTIAL | CORE_API | AtlasHybrid has a narrow `Server`; offline players, operators, services and messenger are absent. |
-| Commands | `PluginCommand`, `TabExecutor`, `CommandMap`, sender permission checks, server command events | PARTIAL | CORE_API | Basic command execution exists. Raw boot #3 first stops at missing `TabExecutor`; tab completion, command events and the command map contract remain absent. |
+| Commands | `PluginCommand`, `TabExecutor`, `CommandMap`, sender permission checks, server command events | PARTIAL | CORE_API | `TabCompleter`, `TabExecutor`, aliases and Forge/Brigadier player/console completion are implemented. Command events and the broader command-map contract remain absent. |
 | Configuration | `YamlConfiguration`, `ConfigurationSection`, typed maps/lists, section traversal | PARTIAL | CORE_API | Current deterministic YAML supports tested scalar/list/location paths, not Bukkit's section model required by `BukkitConfigAdapter`. |
 | Events | pre-login/login/quit, join, world/game-mode change, command, plugin enable/disable, server command | PARTIAL | CORE_API | Join/quit exist; most LuckPerms lifecycle, context and command events do not. Async pre-login also needs a real thread-safety contract. |
 | Scheduler | Bukkit sync scheduling plus LuckPerms' own scheduled executor and `ForkJoinPool` | PARTIAL | CORE_API | Existing sync bridge is narrow. LuckPerms' async pool is real and has explicit termination, but a successful lifecycle cannot be reached to validate it. |
@@ -220,3 +220,20 @@ The next first failure occurs while line 110 creates `LPBukkitPlugin`:
 | CraftBukkit internals? | No; the later injection paths have not been reached |
 | Category | **CORE_API** |
 | Phase 9.3 action | Stop and document; do not implement the next symbol or continue the cascade |
+
+## Phase 9.4 observed loader boundary
+
+The generic command expansion let the unchanged artifact link `TabExecutor`,
+finish construction and begin `LPBukkitBootstrap.onLoad`. Its configuration
+adapter then invoked a public Bukkit overload that AtlasHybrid does not yet
+provide:
+
+| Item | Classification |
+|---|---|
+| Symbol/path | `BukkitConfigAdapter.reload:51` -> `YamlConfiguration#loadConfiguration(java.io.File)` |
+| Diagnostic | `Missing API: org.bukkit.configuration.file.YamlConfiguration#loadConfiguration(java.io.File)`, `Status: NOT_IMPLEMENTED` |
+| Lifecycle phase | `BukkitLoaderPlugin.onLoad` via `LPBukkitBootstrap.onLoad:152`; before enable and storage startup |
+| Public API? | Yes; a simple overload alongside AtlasHybrid's existing `Path` method |
+| CraftBukkit internals? | No; the known later permission-injection paths have not been reached |
+| Category | **TRIVIAL** |
+| Phase 9.4 action | Stop and document; do not implement the next API or continue the cascade |

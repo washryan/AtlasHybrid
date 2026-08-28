@@ -2,6 +2,8 @@ package dev.atlashybrid.runtime;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.atlashybrid.runtime.command.CommandRegistry;
@@ -21,6 +23,12 @@ import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.command.CommandSender;
+import org.bukkit.command.Command;
+import org.bukkit.command.CommandExecutor;
+import org.bukkit.command.ConsoleCommandSender;
+import org.bukkit.command.PluginCommand;
+import org.bukkit.command.TabCompleter;
+import org.bukkit.command.TabExecutor;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -34,6 +42,85 @@ import org.bukkit.permissions.PermissionAttachmentInfo;
 import org.junit.jupiter.api.Test;
 
 class RuntimeCoreTest {
+    @Test
+    void tabExecutorComposesCommandExecutorAndTabCompleter() {
+        assertTrue(CommandExecutor.class.isAssignableFrom(TabExecutor.class));
+        assertTrue(TabCompleter.class.isAssignableFrom(TabExecutor.class));
+    }
+
+    @Test
+    void pluginCommandRegistersExplicitTabCompleter() {
+        FakePlugin owner = new FakePlugin();
+        PluginCommand command = new PluginCommand("atlas", owner);
+        TabCompleter completer = (sender, ignored, alias, args) -> List.of("alpha");
+        assertNull(command.getTabCompleter());
+        command.setTabCompleter(completer);
+        assertSame(completer, command.getTabCompleter());
+        assertEquals(List.of("alpha"), command.tabComplete(new FakeSender(), "atlas", new String[] { "" }));
+        command.setExecutor((sender, ignored, label, args) -> true);
+        command.setExecutor(null);
+        assertSame(owner, command.getExecutor());
+    }
+
+    @Test
+    void explicitCompleterOverridesTabExecutorAndEmptyListStopsFallback() {
+        PluginCommand command = new PluginCommand("atlas", new FakePlugin());
+        AtomicInteger executorCompletions = new AtomicInteger();
+        command.setExecutor(new TabExecutor() {
+            @Override public boolean onCommand(CommandSender sender, Command ignored, String label, String[] args) { return true; }
+            @Override public List<String> onTabComplete(CommandSender sender, Command ignored, String alias, String[] args) {
+                executorCompletions.incrementAndGet();
+                return List.of("executor");
+            }
+        });
+        command.setTabCompleter((sender, ignored, alias, args) -> List.of());
+        assertEquals(List.of(), command.tabComplete(new FakeSender(), "atlas", new String[] { "" }));
+        assertEquals(0, executorCompletions.get());
+    }
+
+    @Test
+    void nullResultFallsBackToCommandDefaultWithoutCallingExecutorCompleter() {
+        PluginCommand command = new PluginCommand("atlas", new FakePlugin());
+        AtomicInteger executorCompletions = new AtomicInteger();
+        command.setExecutor(new TabExecutor() {
+            @Override public boolean onCommand(CommandSender sender, Command ignored, String label, String[] args) { return true; }
+            @Override public List<String> onTabComplete(CommandSender sender, Command ignored, String alias, String[] args) {
+                executorCompletions.incrementAndGet();
+                return null;
+            }
+        });
+        command.setTabCompleter((sender, ignored, alias, args) -> null);
+        assertEquals(List.of(), command.tabComplete(new FakeSender(), "atlas", new String[] { "" }));
+        assertEquals(0, executorCompletions.get());
+    }
+
+    @Test
+    void executorTabCompleterReceivesClonedArguments() {
+        PluginCommand command = new PluginCommand("atlas", new FakePlugin());
+        String[] supplied = { "one", "two" };
+        command.setExecutor(new TabExecutor() {
+            @Override public boolean onCommand(CommandSender sender, Command ignored, String label, String[] args) { return true; }
+            @Override public List<String> onTabComplete(CommandSender sender, Command ignored, String alias, String[] args) {
+                args[0] = "changed";
+                return List.of(alias, args[1]);
+            }
+        });
+        assertEquals(List.of("atlas", "two"), command.tabComplete(new FakeSender(), "atlas", supplied));
+        assertEquals("one", supplied[0]);
+    }
+
+    @Test
+    void registryPreservesAliasesAndPlayerAndConsoleSendersForTabCompletion() {
+        CommandRegistry registry = new CommandRegistry();
+        PluginCommand command = registry.register("luckperms", new FakePlugin());
+        registry.registerAlias("lp", command);
+        command.setTabCompleter((sender, ignored, alias, args) ->
+            List.of(alias, sender instanceof Player ? "player" : "console", args[0]));
+        assertEquals(List.of("lp", "player", "p"), registry.tabComplete("LP", new FakePlayer(), new String[] { "p" }));
+        assertEquals(List.of("luckperms", "console", "c"),
+            registry.tabComplete("luckperms", new FakeConsole(), new String[] { "c" }));
+    }
+
     @Test
     void commandBridgeDispatchesArgumentsAndResponse() {
         CommandRegistry registry = new CommandRegistry();
@@ -106,6 +193,8 @@ class RuntimeCoreTest {
         @Override public void onLoad() { }
         @Override public void onEnable() { }
         @Override public void onDisable() { }
+        @Override public boolean onCommand(CommandSender sender, Command command, String label, String[] args) { return false; }
+        @Override public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) { return null; }
     }
 
     private static class FakeSender implements CommandSender {
@@ -132,6 +221,9 @@ class RuntimeCoreTest {
         @Override public String getDisplayName() { return getName(); }
         @Override public Location getLocation() { return null; }
         @Override public boolean teleport(Location location) { return false; }
+    }
+
+    private static final class FakeConsole extends FakeSender implements ConsoleCommandSender {
     }
 
     private static final class FakeBlock implements Block {

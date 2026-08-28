@@ -1,6 +1,7 @@
 package dev.atlashybrid.testmod;
 
 import com.mojang.logging.LogUtils;
+import java.util.List;
 import io.netty.channel.embedded.EmbeddedChannel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.Connection;
@@ -72,6 +73,15 @@ public final class AtlasHybridTestMod {
         player.setPos(position.getX() + 0.5D, position.getY() + 1.0D, position.getZ() + 0.5D);
         player.gameMode.changeGameModeForPlayer(GameType.SURVIVAL);
 
+        List<String> consoleSuggestions = suggestions("atlas ", source);
+        List<String> playerSuggestions = suggestions("atlas ", player.createCommandSourceStack());
+        List<String> expectedSuggestions = List.of("alpha", "beta", "gamma");
+        if (!expectedSuggestions.equals(consoleSuggestions) || !expectedSuggestions.equals(playerSuggestions)) {
+            throw new IllegalStateException("Tab completion mismatch: console=" + consoleSuggestions
+                + " player=" + playerSuggestions);
+        }
+        LOGGER.info("[AtlasHybridIntegration] TAB_COMPLETION_OK");
+
         MinecraftForge.EVENT_BUS.post(new PlayerEvent.PlayerLoggedInEvent(player));
         runExternalRegressionIfPresent(player);
         level.setBlockAndUpdate(position, Blocks.STONE.defaultBlockState());
@@ -110,5 +120,12 @@ public final class AtlasHybridTestMod {
 
     private int perform(String command, net.minecraft.commands.CommandSourceStack source) {
         return server.getCommands().performCommand(server.getCommands().getDispatcher().parse(command, source), command);
+    }
+
+    private List<String> suggestions(String command, net.minecraft.commands.CommandSourceStack source) {
+        var dispatcher = server.getCommands().getDispatcher();
+        return dispatcher.getCompletionSuggestions(dispatcher.parse(command, source)).join().getList().stream()
+            .map(suggestion -> suggestion.getText())
+            .toList();
     }
 }

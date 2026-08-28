@@ -2,6 +2,8 @@ package dev.atlashybrid.forge;
 
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.suggestion.Suggestions;
+import com.mojang.brigadier.suggestion.SuggestionsBuilder;
 import dev.atlashybrid.diagnostics.CompatibilityCollector;
 import dev.atlashybrid.diagnostics.CompatibilityRuntime;
 import dev.atlashybrid.loader.DependencyResolutionException;
@@ -15,6 +17,7 @@ import dev.atlashybrid.runtime.permission.PermissionProviderRegistry;
 import dev.atlashybrid.runtime.service.AtlasServicesManager;
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.concurrent.CompletableFuture;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import net.minecraft.commands.CommandSourceStack;
@@ -131,12 +134,10 @@ public final class AtlasHybridMod {
     private void registerAtlasCommand(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(Commands.literal("atlas")
             .executes(context -> dispatch(context.getSource(), new String[0]))
-            .then(Commands.literal("info").executes(context -> dispatch(context.getSource(), new String[] { "info" })))
-            .then(Commands.literal("permission")
-                .then(Commands.argument("node", StringArgumentType.word())
-                    .executes(context -> dispatch(context.getSource(), new String[] {
-                        "permission", StringArgumentType.getString(context, "node")
-                    }))))
+            .then(Commands.argument("args", StringArgumentType.greedyString())
+                .suggests((context, builder) -> suggestPlugin("atlas", context.getSource(), builder))
+                .executes(context -> dispatch(context.getSource(),
+                    splitArguments(StringArgumentType.getString(context, "args")))))
         );
     }
 
@@ -146,7 +147,36 @@ public final class AtlasHybridMod {
             dispatcher.register(Commands.literal(name)
                 .executes(context -> dispatchPlugin(name, context.getSource(), new String[0]))
                 .then(Commands.argument("args", StringArgumentType.greedyString())
+                    .suggests((context, builder) -> suggestPlugin(name, context.getSource(), builder))
                     .executes(context -> dispatchPlugin(name, context.getSource(), splitArguments(StringArgumentType.getString(context, "args"))))));
+        }
+    }
+
+    private CompletableFuture<Suggestions> suggestPlugin(
+        String name,
+        CommandSourceStack source,
+        SuggestionsBuilder builder
+    ) {
+        if (source.getServer().isSameThread()) {
+            addPluginSuggestions(name, source, builder);
+            return builder.buildFuture();
+        }
+        CompletableFuture<Suggestions> result = new CompletableFuture<>();
+        source.getServer().execute(() -> {
+            try {
+                addPluginSuggestions(name, source, builder);
+                result.complete(builder.build());
+            } catch (Throwable throwable) {
+                result.completeExceptionally(throwable);
+            }
+        });
+        return result;
+    }
+
+    private void addPluginSuggestions(String name, CommandSourceStack source, SuggestionsBuilder builder) {
+        for (String suggestion : commands.tabComplete(name, ForgeCommandSender.of(source),
+            splitCompletionArguments(builder.getRemaining()))) {
+            builder.suggest(suggestion);
         }
     }
 
@@ -158,6 +188,10 @@ public final class AtlasHybridMod {
     private static String[] splitArguments(String raw) {
         String value = raw.strip();
         return value.isEmpty() ? new String[0] : value.split("\\s+");
+    }
+
+    private static String[] splitCompletionArguments(String raw) {
+        return raw.isEmpty() ? new String[] { "" } : raw.split("\\s+", -1);
     }
 
     private int dispatch(CommandSourceStack source, String[] args) {

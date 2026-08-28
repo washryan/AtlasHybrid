@@ -41,7 +41,8 @@ Never point the development `run/` directory at a personal or production server.
 - `Plugin` and `JavaPlugin` lifecycle: `onLoad`, `onEnable`, `onDisable`
 - basic plugin logger and deterministic YAML configuration for scalars, string lists and locations
 - `Bukkit`, minimal `Server`, `PluginManager`
-- `Command`, `PluginCommand`, `CommandSender`
+- `Command`, `PluginCommand`, `CommandSender`, `TabCompleter`, `TabExecutor`
+- Forge/Brigadier tab completion for plugin commands, aliases, players and console
 - `Player`, `World`, `Location`, `ChatColor`, `Listener`, `Event`, `HandlerList`
 - real player position reads and same-server/dimension teleportation
 - `PlayerJoinEvent`, `PlayerQuitEvent`, `BlockBreakEvent`

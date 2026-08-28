@@ -3,6 +3,7 @@ package dev.atlashybrid.runtime.command;
 import dev.atlashybrid.diagnostics.CompatibilityRuntime;
 import java.util.LinkedHashMap;
 import java.util.Locale;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import org.bukkit.command.CommandSender;
@@ -41,14 +42,31 @@ public final class CommandRegistry {
     public boolean dispatch(String name, CommandSender sender, String[] args) {
         PluginCommand command = get(name);
         if (command == null) return false;
+        String alias = key(name);
         try (CompatibilityRuntime.Scope ignored = CompatibilityRuntime.enter(command.getPlugin().getName())) {
             try {
-                return command.execute(sender, command.getName(), args);
+                return command.execute(sender, alias, args);
             } catch (Throwable throwable) {
                 CompatibilityRuntime.reportLinkageFailure(throwable);
                 if (throwable instanceof RuntimeException exception) throw exception;
                 if (throwable instanceof Error error) throw error;
                 throw new IllegalStateException("Plugin command failed", throwable);
+            }
+        }
+    }
+
+    public List<String> tabComplete(String name, CommandSender sender, String[] args) {
+        PluginCommand command = get(name);
+        if (command == null) return List.of();
+        String alias = key(name);
+        try (CompatibilityRuntime.Scope ignored = CompatibilityRuntime.enter(command.getPlugin().getName())) {
+            try {
+                return command.tabComplete(sender, alias, args);
+            } catch (Throwable throwable) {
+                CompatibilityRuntime.reportLinkageFailure(throwable);
+                if (throwable instanceof RuntimeException exception) throw exception;
+                if (throwable instanceof Error error) throw error;
+                throw new IllegalStateException("Plugin tab completion failed", throwable);
             }
         }
     }

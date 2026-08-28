@@ -3,6 +3,7 @@ package dev.atlashybrid.testplugin;
 import dev.atlashybrid.runtime.permission.AtlasPermissions;
 import dev.atlashybrid.runtime.permission.PermissionProviderPriority;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Optional;
 import org.bukkit.Location;
 import org.bukkit.command.Command;
@@ -76,6 +77,11 @@ public final class AtlasHybridTestPlugin extends JavaPlugin implements Listener,
         }
         sender.sendMessage("Usage: /atlas [info|permission <node>]; got " + Arrays.toString(args));
         return false;
+    }
+
+    @Override
+    public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
+        return args.length == 1 ? List.of("alpha", "beta", "gamma") : List.of();
     }
 
     @EventHandler

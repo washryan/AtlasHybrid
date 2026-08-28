@@ -5,9 +5,12 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
+import java.util.List;
 import java.util.Objects;
 import java.util.logging.Logger;
 import org.bukkit.Server;
+import org.bukkit.command.Command;
+import org.bukkit.command.CommandSender;
 import org.bukkit.command.PluginCommand;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
@@ -77,6 +80,9 @@ public abstract class JavaPlugin implements Plugin {
     @Override public void onLoad() { }
     @Override public void onEnable() { }
     @Override public void onDisable() { }
+
+    @Override public boolean onCommand(CommandSender sender, Command command, String label, String[] args) { return false; }
+    @Override public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) { return null; }
 
     @Override public final String getName() { return getDescription().getName(); }
     @Override public final PluginDescriptionFile getDescription() { requireContext("JavaPlugin#getDescription"); return description; }

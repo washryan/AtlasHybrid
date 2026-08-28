@@ -329,6 +329,8 @@ class PermissionCoreTest {
         @Override public void onLoad() { }
         @Override public void onEnable() { }
         @Override public void onDisable() { }
+        @Override public boolean onCommand(org.bukkit.command.CommandSender sender, org.bukkit.command.Command command, String label, String[] args) { return false; }
+        @Override public java.util.List<String> onTabComplete(org.bukkit.command.CommandSender sender, org.bukkit.command.Command command, String alias, String[] args) { return null; }
     }
 
     private record TestServer(PluginManager pluginManager, ServicesManager services, BukkitScheduler scheduler) implements Server {

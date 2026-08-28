@@ -179,3 +179,43 @@ AtlasHybrid runtime, test mod and test plugin loaded; commands, join/quit,
 location/teleport, real block-break cancellation, immediate/delayed scheduling,
 the expected unsupported-API diagnostic, lifecycle counts and clean shutdown
 all completed. No `ERROR` or `FATAL` appeared in that proof log.
+
+## Phase 9.4 raw boot #4
+
+Phase 9.4 implemented the generic Bukkit command tab-completion contract and its
+Forge/Brigadier bridge. The official, unchanged LuckPerms artifact passed the
+former `TabExecutor` linkage blocker, completed construction, entered
+`BukkitLoaderPlugin.onLoad`, and logged `Loading configuration...`.
+
+The next first failure is:
+
+```text
+[AtlasHybrid Compatibility]
+Plugin: LuckPerms
+Missing API: org.bukkit.configuration.file.YamlConfiguration#loadConfiguration(java.io.File)
+Status: NOT_IMPLEMENTED
+Runtime: 0.1.0-alpha
+
+java.lang.NoSuchMethodError:
+org.bukkit.configuration.file.YamlConfiguration.loadConfiguration(java.io.File)
+    at me.lucko.luckperms.bukkit.BukkitConfigAdapter.reload(BukkitConfigAdapter.java:51)
+    at me.lucko.luckperms.bukkit.BukkitConfigAdapter.<init>(BukkitConfigAdapter.java:46)
+    at me.lucko.luckperms.bukkit.LPBukkitPlugin.provideConfigurationAdapter(LPBukkitPlugin.java:130)
+    at me.lucko.luckperms.common.plugin.AbstractLuckPermsPlugin.load(AbstractLuckPermsPlugin.java:144)
+    at me.lucko.luckperms.bukkit.LPBukkitBootstrap.onLoad(LPBukkitBootstrap.java:152)
+```
+
+Classification: **TRIVIAL**. AtlasHybrid already has the equivalent deterministic
+`Path` overload; the missing symbol is the normal public Bukkit `File` overload,
+not CraftBukkit, NMS, Paper, Mixin or instrumentation. Per the Phase 9.4 stop
+gate, it is documented but not implemented. The raw boot summary was one plugin
+discovered, zero loaded and one unsupported call. The expected compatibility
+`ERROR` was preserved, there was no `FATAL`, and Forge saved all dimensions on
+shutdown.
+
+The Phase 9.4 regression suite passed `53/53` tests, real Brigadier completion
+for player and console with `TAB_COMPLETION_OK` exactly once, WelcomeMessage and
+WarpPlugin `FULL` regressions, Permission Core and ServicesManager checks, and
+two byte-identical clean builds. LuckPerms remains **BLOCKED** and unsupported;
+this later public API boundary does not remove the already documented
+CraftBukkit permission-injection architecture gate.

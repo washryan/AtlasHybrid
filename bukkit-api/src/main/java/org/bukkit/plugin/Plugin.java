@@ -4,8 +4,9 @@ import java.io.File;
 import java.util.logging.Logger;
 import org.bukkit.Server;
 import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.command.TabExecutor;
 
-public interface Plugin {
+public interface Plugin extends TabExecutor {
     String getName();
 
     PluginDescriptionFile getDescription();
