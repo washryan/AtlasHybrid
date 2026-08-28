@@ -57,14 +57,15 @@ Never point the development `run/` directory at a personal or production server.
 ## Compatibility
 
 Compatibility is evidence-based: discovery alone is never treated as support.
-The current matrix includes the internal acceptance fixture and two external,
-pinned open-source plugins tested without source modification. External plugin
+The current matrix includes the internal acceptance fixture and pinned external
+open-source plugins tested without source modification. External plugin
 artifacts are not bundled. See the [compatibility matrix](docs/COMPATIBILITY.md)
-and the [WarpPlugin report](docs/compatibility/WARPPLUGIN.md).
+and the detailed compatibility reports.
 
 - AtlasHybridTestPlugin `0.1.0-alpha`: **FULL**
 - WelcomeMessage `1.0`: **FULL**
 - WarpPlugin `1.0`: **FULL**
+- LuckPerms `5.5.81`: **BLOCKED** (research/raw boot only; not supported)
 
 Unsupported linkage is reported under `[AtlasHybrid Compatibility]` with the
 plugin, missing symbol, `NOT_IMPLEMENTED` status and runtime version before the
