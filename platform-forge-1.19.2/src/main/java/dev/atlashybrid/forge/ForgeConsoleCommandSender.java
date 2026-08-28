@@ -1,26 +1,39 @@
 package dev.atlashybrid.forge;
 
-import net.minecraft.commands.CommandSourceStack;
+import dev.atlashybrid.runtime.permission.AtlasPermissible;
+import dev.atlashybrid.runtime.permission.AtlasPermissionRegistry;
+import dev.atlashybrid.runtime.permission.PermissionProviderRegistry;
+import dev.atlashybrid.runtime.permission.PermissionSubject;
 import net.minecraft.network.chat.Component;
-import net.minecraft.server.level.ServerPlayer;
-import org.bukkit.command.CommandSender;
+import net.minecraft.server.MinecraftServer;
+import org.bukkit.command.ConsoleCommandSender;
 import org.bukkit.permissions.Permission;
 import org.bukkit.permissions.PermissionAttachment;
 import org.bukkit.permissions.PermissionAttachmentInfo;
+import org.bukkit.permissions.ServerOperator;
 import org.bukkit.plugin.Plugin;
+
 import java.util.Set;
 
-final class ForgeCommandSender implements CommandSender {
-    private final CommandSourceStack source;
-    private final CommandSender permissions;
+final class ForgeConsoleCommandSender implements ConsoleCommandSender, AutoCloseable {
+    private final MinecraftServer server;
+    private final AtlasPermissible permissions;
 
-    ForgeCommandSender(CommandSourceStack source, CommandSender permissions) {
-        this.source = source;
-        this.permissions = permissions;
+    ForgeConsoleCommandSender(MinecraftServer server, AtlasPermissionRegistry registry, PermissionProviderRegistry providers) {
+        this.server = server;
+        ServerOperator operator = new ServerOperator() {
+            @Override public boolean isOp() { return true; }
+            @Override public void setOp(boolean value) {
+                if (!value) throw new UnsupportedOperationException("The dedicated server console cannot be de-opped");
+            }
+        };
+        permissions = new AtlasPermissible(operator, registry, providers,
+            () -> new PermissionSubject(getName(), null, PermissionSubject.Type.CONSOLE, true));
     }
 
-    @Override public String getName() { return source.getTextName(); }
-    @Override public void sendMessage(String message) { source.sendSuccess(Component.literal(message), false); }
+    void initializePermissions() { permissions.recalculatePermissions(); }
+    @Override public String getName() { return "CONSOLE"; }
+    @Override public void sendMessage(String message) { server.sendSystemMessage(Component.literal(message)); }
     @Override public boolean isOp() { return permissions.isOp(); }
     @Override public void setOp(boolean value) { permissions.setOp(value); }
     @Override public boolean isPermissionSet(String name) { return permissions.isPermissionSet(name); }
@@ -34,10 +47,5 @@ final class ForgeCommandSender implements CommandSender {
     @Override public void removeAttachment(PermissionAttachment attachment) { permissions.removeAttachment(attachment); }
     @Override public void recalculatePermissions() { permissions.recalculatePermissions(); }
     @Override public Set<PermissionAttachmentInfo> getEffectivePermissions() { return permissions.getEffectivePermissions(); }
-
-    static CommandSender of(CommandSourceStack source) {
-        ForgeServerAdapter server = (ForgeServerAdapter) org.bukkit.Bukkit.getServer();
-        if (source.getEntity() instanceof ServerPlayer player) return server.player(player);
-        return new ForgeCommandSender(source, server.getConsoleSender());
-    }
+    @Override public void close() { permissions.close(); }
 }

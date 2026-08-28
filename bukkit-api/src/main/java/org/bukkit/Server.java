@@ -2,7 +2,9 @@ package org.bukkit;
 
 import java.util.logging.Logger;
 import org.bukkit.command.PluginCommand;
+import org.bukkit.command.ConsoleCommandSender;
 import org.bukkit.plugin.PluginManager;
+import org.bukkit.plugin.ServicesManager;
 import org.bukkit.scheduler.BukkitScheduler;
 
 public interface Server {
@@ -21,6 +23,10 @@ public interface Server {
     int getDetectedModCount();
 
     PluginManager getPluginManager();
+
+    ServicesManager getServicesManager();
+
+    ConsoleCommandSender getConsoleSender();
 
     BukkitScheduler getScheduler();
 

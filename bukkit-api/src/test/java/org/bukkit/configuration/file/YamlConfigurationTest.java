@@ -68,6 +68,8 @@ class YamlConfigurationTest {
         @Override public String getAtlasHybridVersion() { return "0.1.0-alpha"; }
         @Override public int getDetectedModCount() { return 0; }
         @Override public PluginManager getPluginManager() { return null; }
+        @Override public org.bukkit.plugin.ServicesManager getServicesManager() { return null; }
+        @Override public org.bukkit.command.ConsoleCommandSender getConsoleSender() { return null; }
         @Override public BukkitScheduler getScheduler() { return null; }
         @Override public PluginCommand getPluginCommand(String name) { return null; }
         @Override public World getWorld(String name) { return world.getName().equals(name) ? world : null; }

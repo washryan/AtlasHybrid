@@ -1,6 +1,6 @@
 # ADR-006: AtlasHybrid-owned permission system
 
-- Status: **Accepted for phased implementation**
+- Status: **Accepted; Phase 9.2 core implemented**
 - Date: 2026-08-28
 - Scope: architecture only; no permission implementation is included in Phase 9.1
 - Compatibility target that triggered the decision: LuckPerms Bukkit `5.5.81`
@@ -257,6 +257,21 @@ fallback. A raw boot cannot resolve that architectural fact.
 
 Phase 9.2 must not claim LuckPerms support and must not add a LuckPerms-specific
 bridge.
+
+### Phase 9.2 implementation outcome
+
+The permission core, provider SPI, player/console composition and services
+manager described above are implemented. The exact runtime behavior and thread
+model are documented in [`PERMISSION_CORE.md`](PERMISSION_CORE.md). The
+implementation uses no Mixin, NMS, fake CraftBukkit shape, private-field
+compatibility reflection or LuckPerms-specific code.
+
+The second unmodified LuckPerms boot advanced past the former
+`ConsoleCommandSender` linkage boundary. Its next failure occurs earlier than
+permission injection: the nested `LPBukkitBootstrap` instance calls
+`JavaPlugin#getLogger()` from its constructor before AtlasHybrid has initialized
+that nested instance. This is a plugin construction/classloader lifecycle
+boundary and is not addressed by Phase 9.2.
 
 ### Later reviewed phase: provider integration
 

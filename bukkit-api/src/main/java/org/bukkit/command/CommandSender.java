@@ -1,11 +1,10 @@
 package org.bukkit.command;
 
-public interface CommandSender {
+import org.bukkit.permissions.Permissible;
+
+public interface CommandSender extends Permissible {
     String getName();
 
     void sendMessage(String message);
 
-    boolean isOp();
-
-    boolean hasPermission(String permission);
 }

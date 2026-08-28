@@ -3,6 +3,12 @@ package dev.atlashybrid.forge;
 import dev.atlashybrid.runtime.command.CommandRegistry;
 import dev.atlashybrid.runtime.event.AtlasPluginManager;
 import dev.atlashybrid.runtime.scheduler.AtlasScheduler;
+import dev.atlashybrid.runtime.permission.AtlasPermissionRegistry;
+import dev.atlashybrid.runtime.permission.PermissionProviderRegistry;
+import dev.atlashybrid.runtime.service.AtlasServicesManager;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
@@ -12,7 +18,9 @@ import net.minecraftforge.versions.forge.ForgeVersion;
 import org.bukkit.Server;
 import org.bukkit.World;
 import org.bukkit.command.PluginCommand;
+import org.bukkit.command.ConsoleCommandSender;
 import org.bukkit.plugin.PluginManager;
+import org.bukkit.plugin.ServicesManager;
 import org.bukkit.scheduler.BukkitScheduler;
 
 final class ForgeServerAdapter implements Server {
@@ -20,12 +28,22 @@ final class ForgeServerAdapter implements Server {
     private final AtlasPluginManager pluginManager;
     private final AtlasScheduler scheduler;
     private final CommandRegistry commands;
+    private final AtlasPermissionRegistry permissions;
+    private final PermissionProviderRegistry providers;
+    private final AtlasServicesManager services;
+    private final Map<UUID, ForgePlayerAdapter> players = new ConcurrentHashMap<>();
+    private final ForgeConsoleCommandSender console;
 
-    ForgeServerAdapter(MinecraftServer minecraftServer, AtlasPluginManager pluginManager, AtlasScheduler scheduler, CommandRegistry commands) {
+    ForgeServerAdapter(MinecraftServer minecraftServer, AtlasPluginManager pluginManager, AtlasScheduler scheduler, CommandRegistry commands,
+                       AtlasPermissionRegistry permissions, PermissionProviderRegistry providers, AtlasServicesManager services) {
         this.minecraftServer = minecraftServer;
         this.pluginManager = pluginManager;
         this.scheduler = scheduler;
         this.commands = commands;
+        this.permissions = permissions;
+        this.providers = providers;
+        this.services = services;
+        this.console = new ForgeConsoleCommandSender(minecraftServer, permissions, providers);
     }
 
     @Override public String getName() { return "AtlasHybrid"; }
@@ -36,6 +54,8 @@ final class ForgeServerAdapter implements Server {
     @Override public String getAtlasHybridVersion() { return AtlasHybridMod.VERSION; }
     @Override public int getDetectedModCount() { return ModList.get().size(); }
     @Override public PluginManager getPluginManager() { return pluginManager; }
+    @Override public ServicesManager getServicesManager() { return services; }
+    @Override public ConsoleCommandSender getConsoleSender() { return console; }
     @Override public BukkitScheduler getScheduler() { return scheduler; }
     @Override public PluginCommand getPluginCommand(String name) { return commands.get(name); }
     @Override public World getWorld(String name) {
@@ -48,6 +68,30 @@ final class ForgeServerAdapter implements Server {
         return null;
     }
     @Override public Logger getLogger() { return Logger.getLogger("AtlasHybrid"); }
+
+    void initializePermissions() { console.initializePermissions(); }
+
+    ForgePlayerAdapter player(net.minecraft.server.level.ServerPlayer player) {
+        return players.computeIfAbsent(player.getUUID(), ignored -> {
+            ForgePlayerAdapter adapter = new ForgePlayerAdapter(player, permissions, providers);
+            adapter.initializePermissions();
+            return adapter;
+        });
+    }
+
+    void disconnect(net.minecraft.server.level.ServerPlayer player) {
+        ForgePlayerAdapter adapter = players.remove(player.getUUID());
+        if (adapter != null) adapter.close();
+    }
+
+    int permissionProviderCount() { return providers.size(); }
+    int serviceCount() { return services.size(); }
+
+    void close() {
+        for (ForgePlayerAdapter player : players.values()) player.close();
+        players.clear();
+        console.close();
+    }
 
     String worldName(ServerLevel level) {
         String root = minecraftServer.getWorldData().getLevelName();

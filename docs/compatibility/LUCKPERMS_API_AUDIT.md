@@ -183,3 +183,21 @@ AtlasHybrid-owned composition can provide A without Minecraft mutation. It
 cannot make the current LuckPerms Bukkit artifact install its permissible unless
 LuckPerms uses an Atlas provider hook, an adapter is supplied, or AtlasHybrid
 emulates/transforms the private CraftBukkit path.
+
+## Phase 9.2 observed loader boundary
+
+After the public permission, console and services contracts were implemented,
+raw boot #2 no longer failed on `ConsoleCommandSender`. LuckPerms' outer
+`BukkitLoaderPlugin` constructor loaded and reflectively instantiated
+`LPBukkitBootstrap`. That nested `JavaPlugin` called `getLogger()` at constructor
+line 104 before AtlasHybrid's post-construction `atlasInitialize` step could
+initialize it, producing `IllegalStateException`.
+
+| Item | Classification |
+|---|---|
+| Symbol/path | `LPBukkitBootstrap.<init>` -> `JavaPlugin#getLogger` |
+| Need | Logger/server/plugin construction context must exist while a nested `JavaPlugin` constructor executes |
+| Public API? | `JavaPlugin#getLogger` is public; the timing and classloader-driven initialization shape are implementation/lifecycle semantics |
+| CraftBukkit internals? | No; failure occurs before `SimplePluginManager` maps or `CraftHumanEntity#perm` injection |
+| Category | **ARCHITECTURAL** |
+| Phase 9.2 action | Stop and document; no cascading loader or LuckPerms-specific implementation |

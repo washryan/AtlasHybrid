@@ -7,6 +7,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import dev.atlashybrid.runtime.command.CommandRegistry;
 import dev.atlashybrid.runtime.event.AtlasPluginManager;
 import dev.atlashybrid.runtime.scheduler.AtlasScheduler;
+import dev.atlashybrid.runtime.permission.AtlasPermissionRegistry;
+import dev.atlashybrid.runtime.permission.PermissionProviderRegistry;
+import dev.atlashybrid.runtime.service.AtlasServicesManager;
 import java.io.File;
 import java.util.List;
 import java.util.Set;
@@ -25,6 +28,9 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.PluginDescriptionFile;
+import org.bukkit.permissions.Permission;
+import org.bukkit.permissions.PermissionAttachment;
+import org.bukkit.permissions.PermissionAttachmentInfo;
 import org.junit.jupiter.api.Test;
 
 class RuntimeCoreTest {
@@ -55,7 +61,9 @@ class RuntimeCoreTest {
 
     @Test
     void eventDispatchPropagatesCancellation() {
-        AtlasPluginManager manager = new AtlasPluginManager(Logger.getAnonymousLogger());
+        Logger logger = Logger.getAnonymousLogger();
+        AtlasPluginManager manager = new AtlasPluginManager(logger, new AtlasPermissionRegistry(),
+            new PermissionProviderRegistry(logger), new AtlasServicesManager());
         FakePlugin plugin = new FakePlugin();
         manager.addPlugin(plugin);
         manager.registerEvents(new CancelListener(), plugin);
@@ -105,7 +113,18 @@ class RuntimeCoreTest {
         @Override public String getName() { return "sender"; }
         @Override public void sendMessage(String message) { this.message = message; }
         @Override public boolean isOp() { return true; }
+        @Override public void setOp(boolean value) { }
+        @Override public boolean isPermissionSet(String permission) { return true; }
+        @Override public boolean isPermissionSet(Permission permission) { return true; }
         @Override public boolean hasPermission(String permission) { return true; }
+        @Override public boolean hasPermission(Permission permission) { return true; }
+        @Override public PermissionAttachment addAttachment(Plugin plugin, String name, boolean value) { return null; }
+        @Override public PermissionAttachment addAttachment(Plugin plugin) { return null; }
+        @Override public PermissionAttachment addAttachment(Plugin plugin, String name, boolean value, int ticks) { return null; }
+        @Override public PermissionAttachment addAttachment(Plugin plugin, int ticks) { return null; }
+        @Override public void removeAttachment(PermissionAttachment attachment) { }
+        @Override public void recalculatePermissions() { }
+        @Override public Set<PermissionAttachmentInfo> getEffectivePermissions() { return Set.of(); }
     }
 
     private static final class FakePlayer extends FakeSender implements Player {

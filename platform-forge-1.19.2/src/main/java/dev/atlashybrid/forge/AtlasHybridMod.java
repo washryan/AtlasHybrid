@@ -9,6 +9,10 @@ import dev.atlashybrid.loader.PluginRuntime;
 import dev.atlashybrid.runtime.command.CommandRegistry;
 import dev.atlashybrid.runtime.event.AtlasPluginManager;
 import dev.atlashybrid.runtime.scheduler.AtlasScheduler;
+import dev.atlashybrid.runtime.permission.AtlasPermissionRegistry;
+import dev.atlashybrid.runtime.permission.AtlasPermissions;
+import dev.atlashybrid.runtime.permission.PermissionProviderRegistry;
+import dev.atlashybrid.runtime.service.AtlasServicesManager;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.logging.Level;
@@ -46,6 +50,9 @@ public final class AtlasHybridMod {
     private ForgeServerAdapter serverAdapter;
     private PluginRuntime pluginRuntime;
     private CompatibilityCollector compatibilityCollector;
+    private AtlasPermissionRegistry permissionRegistry;
+    private PermissionProviderRegistry permissionProviders;
+    private AtlasServicesManager servicesManager;
 
     public AtlasHybridMod() {
         configureLogging();
@@ -78,13 +85,19 @@ public final class AtlasHybridMod {
 
     @SubscribeEvent
     public void onServerAboutToStart(ServerAboutToStartEvent event) {
-        pluginManager = new AtlasPluginManager(LOGGER);
+        permissionRegistry = new AtlasPermissionRegistry();
+        permissionProviders = new PermissionProviderRegistry(LOGGER);
+        servicesManager = new AtlasServicesManager();
+        AtlasPermissions.install(permissionProviders);
+        pluginManager = new AtlasPluginManager(LOGGER, permissionRegistry, permissionProviders, servicesManager);
         scheduler = new AtlasScheduler(LOGGER);
         commands = new CommandRegistry();
         compatibilityCollector = new CompatibilityCollector(LOGGER, VERSION);
         CompatibilityRuntime.install(compatibilityCollector);
-        serverAdapter = new ForgeServerAdapter(event.getServer(), pluginManager, scheduler, commands);
+        serverAdapter = new ForgeServerAdapter(event.getServer(), pluginManager, scheduler, commands,
+            permissionRegistry, permissionProviders, servicesManager);
         Bukkit.setServer(serverAdapter);
+        serverAdapter.initializePermissions();
         pluginRuntime = new PluginRuntime(serverAdapter, pluginManager, commands, scheduler, LOGGER, AtlasHybridMod.class.getClassLoader());
     }
 
@@ -105,7 +118,9 @@ public final class AtlasHybridMod {
         LOGGER.info("[AtlasHybrid Compatibility]\n"
             + "Plugins discovered: " + pluginRuntime.discoveredCount() + "\n"
             + "Loaded: " + pluginRuntime.loadedCount() + "\n"
-            + "Unsupported: " + compatibilityCollector.totalUnsupportedCalls());
+            + "Unsupported: " + compatibilityCollector.totalUnsupportedCalls() + "\n"
+            + "Permission providers: " + serverAdapter.permissionProviderCount() + "\n"
+            + "Services: " + serverAdapter.serviceCount());
     }
 
     @SubscribeEvent
@@ -116,7 +131,13 @@ public final class AtlasHybridMod {
     private void registerAtlasCommand(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(Commands.literal("atlas")
             .executes(context -> dispatch(context.getSource(), new String[0]))
-            .then(Commands.literal("info").executes(context -> dispatch(context.getSource(), new String[] { "info" }))));
+            .then(Commands.literal("info").executes(context -> dispatch(context.getSource(), new String[] { "info" })))
+            .then(Commands.literal("permission")
+                .then(Commands.argument("node", StringArgumentType.word())
+                    .executes(context -> dispatch(context.getSource(), new String[] {
+                        "permission", StringArgumentType.getString(context, "node")
+                    }))))
+        );
     }
 
     private void registerPluginCommands(CommandDispatcher<CommandSourceStack> dispatcher) {
@@ -155,14 +176,18 @@ public final class AtlasHybridMod {
     @SubscribeEvent
     public void onPlayerLogin(PlayerEvent.PlayerLoggedInEvent event) {
         if (pluginManager != null && event.getEntity() instanceof ServerPlayer player) {
-            pluginManager.callEvent(new PlayerJoinEvent(new ForgePlayerAdapter(player)));
+            pluginManager.callEvent(new PlayerJoinEvent(serverAdapter.player(player)));
         }
     }
 
     @SubscribeEvent
     public void onPlayerLogout(PlayerEvent.PlayerLoggedOutEvent event) {
         if (pluginManager != null && event.getEntity() instanceof ServerPlayer player) {
-            pluginManager.callEvent(new PlayerQuitEvent(new ForgePlayerAdapter(player)));
+            try {
+                pluginManager.callEvent(new PlayerQuitEvent(serverAdapter.player(player)));
+            } finally {
+                serverAdapter.disconnect(player);
+            }
         }
     }
 
@@ -170,7 +195,7 @@ public final class AtlasHybridMod {
     public void onBlockBreak(BlockEvent.BreakEvent event) {
         if (pluginManager == null || !(event.getPlayer() instanceof ServerPlayer player)) return;
         boolean previouslyCancelled = event.isCanceled();
-        BlockBreakEvent bridged = new BlockBreakEvent(new ForgeBlockAdapter(event.getLevel(), event.getPos()), new ForgePlayerAdapter(player));
+        BlockBreakEvent bridged = new BlockBreakEvent(new ForgeBlockAdapter(event.getLevel(), event.getPos()), serverAdapter.player(player));
         bridged.setCancelled(previouslyCancelled);
         pluginManager.callEvent(bridged);
         event.setCanceled(previouslyCancelled || bridged.isCancelled());
@@ -178,7 +203,11 @@ public final class AtlasHybridMod {
 
     @SubscribeEvent
     public void onServerStopping(ServerStoppingEvent event) {
-        if (pluginRuntime != null) pluginRuntime.disableAll();
+        if (pluginRuntime != null) {
+            pluginRuntime.disableAll();
+            LOGGER.info("[AtlasHybrid Permission] lifecycle cleanup providers=" + serverAdapter.permissionProviderCount()
+                + " services=" + serverAdapter.serviceCount());
+        }
     }
 
     @SubscribeEvent
@@ -187,6 +216,8 @@ public final class AtlasHybridMod {
             pluginRuntime.close();
             pluginRuntime = null;
         }
+        if (serverAdapter != null) serverAdapter.close();
+        if (permissionProviders != null) AtlasPermissions.clear(permissionProviders);
         Bukkit.setServer(null);
         CompatibilityRuntime.clear();
         pluginManager = null;
@@ -194,5 +225,8 @@ public final class AtlasHybridMod {
         commands = null;
         serverAdapter = null;
         compatibilityCollector = null;
+        permissionRegistry = null;
+        permissionProviders = null;
+        servicesManager = null;
     }
 }

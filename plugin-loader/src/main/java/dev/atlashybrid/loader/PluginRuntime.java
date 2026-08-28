@@ -131,6 +131,9 @@ public final class PluginRuntime implements AutoCloseable {
             } catch (Throwable throwable) {
                 reportLinkage(item.plugin().getName(), throwable);
                 logger.log(Level.SEVERE, "Failed to enable plugin " + item.plugin().getName(), throwable);
+                scheduler.cancelTasks(item.plugin());
+                commands.unregister(item.plugin());
+                pluginManager.unregisterPlugin(item.plugin(), KNOWN_EVENTS);
             }
         }
     }

@@ -59,6 +59,8 @@ class JavaPluginLifecycleTest {
         @Override public String getAtlasHybridVersion() { return "test"; }
         @Override public int getDetectedModCount() { return 0; }
         @Override public PluginManager getPluginManager() { return null; }
+        @Override public org.bukkit.plugin.ServicesManager getServicesManager() { return null; }
+        @Override public org.bukkit.command.ConsoleCommandSender getConsoleSender() { return null; }
         @Override public BukkitScheduler getScheduler() { return null; }
         @Override public PluginCommand getPluginCommand(String name) { return null; }
         @Override public World getWorld(String name) { return null; }

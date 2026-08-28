@@ -3,6 +3,8 @@ package org.bukkit;
 import java.util.Objects;
 import java.util.logging.Logger;
 import org.bukkit.plugin.PluginManager;
+import org.bukkit.plugin.ServicesManager;
+import org.bukkit.command.ConsoleCommandSender;
 import org.bukkit.scheduler.BukkitScheduler;
 
 public final class Bukkit {
@@ -29,6 +31,10 @@ public final class Bukkit {
     public static BukkitScheduler getScheduler() {
         return getServer().getScheduler();
     }
+
+    public static ServicesManager getServicesManager() { return getServer().getServicesManager(); }
+
+    public static ConsoleCommandSender getConsoleSender() { return getServer().getConsoleSender(); }
 
     public static Logger getLogger() {
         return getServer().getLogger();

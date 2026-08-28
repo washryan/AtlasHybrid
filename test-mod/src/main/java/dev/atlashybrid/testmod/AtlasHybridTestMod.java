@@ -60,7 +60,8 @@ public final class AtlasHybridTestMod {
         var source = server.createCommandSourceStack();
         int atlasResult = server.getCommands().performCommand(server.getCommands().getDispatcher().parse("atlas", source), "atlas");
         int infoResult = server.getCommands().performCommand(server.getCommands().getDispatcher().parse("atlas info", source), "atlas info");
-        LOGGER.info("[AtlasHybridIntegration] COMMAND_RESULTS atlas={} info={}", atlasResult, infoResult);
+        int permissionResult = server.getCommands().performCommand(server.getCommands().getDispatcher().parse("atlas permission atlas.test.provider", source), "atlas permission atlas.test.provider");
+        LOGGER.info("[AtlasHybridIntegration] COMMAND_RESULTS atlas={} info={} permission={}", atlasResult, infoResult, permissionResult);
 
         ServerLevel level = server.overworld();
         FakePlayer player = FakePlayerFactory.getMinecraft(level);
@@ -72,6 +73,7 @@ public final class AtlasHybridTestMod {
         player.gameMode.changeGameModeForPlayer(GameType.SURVIVAL);
 
         MinecraftForge.EVENT_BUS.post(new PlayerEvent.PlayerLoggedInEvent(player));
+        runExternalRegressionIfPresent(player);
         level.setBlockAndUpdate(position, Blocks.STONE.defaultBlockState());
         boolean destroyed = player.gameMode.destroyBlock(position);
         boolean blockStillPresent = level.getBlockState(position).is(Blocks.STONE);
@@ -80,5 +82,33 @@ public final class AtlasHybridTestMod {
         channel.finishAndReleaseAll();
         LOGGER.info("[AtlasHybridIntegration] PLAYER_EVENTS_POSTED");
         LOGGER.info("[AtlasHybridIntegration] PROBE_END");
+    }
+
+    private void runExternalRegressionIfPresent(FakePlayer player) {
+        if (org.bukkit.Bukkit.getPluginManager().getPlugin("WelcomeMessage") != null) {
+            LOGGER.info("[AtlasHybridExternalRegression] WELCOME_JOIN_POSTED");
+        }
+        if (org.bukkit.Bukkit.getPluginManager().getPlugin("WarpPlugin") == null) return;
+
+        var source = player.createCommandSourceStack();
+        double savedX = player.getX();
+        double savedY = player.getY();
+        double savedZ = player.getZ();
+        int cleanupBefore = perform("delwarp atlasphase92", source);
+        int addAlias = perform("addwarp atlasphase92", source);
+        player.setPos(savedX + 12.0D, savedY, savedZ + 12.0D);
+        int listAlias = perform("warps", source);
+        int teleport = perform("warp atlasphase92", source);
+        boolean positionMatches = Math.abs(player.getX() - savedX) < 0.001D
+            && Math.abs(player.getY() - savedY) < 0.001D
+            && Math.abs(player.getZ() - savedZ) < 0.001D;
+        int removeAlias = perform("remwarp atlasphase92", source);
+        int missing = perform("warp atlasphase92", source);
+        LOGGER.info("[AtlasHybridExternalRegression] WARP_COMMANDS cleanupBefore={} addAlias={} listAlias={} teleport={} positionMatches={} removeAlias={} missing={}",
+            cleanupBefore, addAlias, listAlias, teleport, positionMatches, removeAlias, missing);
+    }
+
+    private int perform(String command, net.minecraft.commands.CommandSourceStack source) {
+        return server.getCommands().performCommand(server.getCommands().getDispatcher().parse(command, source), command);
     }
 }

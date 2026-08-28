@@ -58,3 +58,12 @@ WelcomeMessage does not override `onLoad`, so there is no plugin-authored `onLoa
 ## Known scope
 
 WelcomeMessage has no commands and no optional integrations. This result covers its version 1.0 behavior: default configuration, enable lifecycle, join-event dispatch and delivery of the configured message. It does not claim compatibility with unrelated Bukkit APIs or other versions of the plugin.
+
+## Phase 9.2 regression
+
+After the AtlasHybrid Permission Core changed `CommandSender` and player
+composition, the pinned external artifact was loaded again beside the internal
+integration fixture. It was discovered, loaded and enabled once; the Forge
+player join was posted once; the internal permission/player-identity proof also
+passed; shutdown was clean; and the run contained no plugin `ERROR`/`FATAL` or
+unsupported call attributed to WelcomeMessage. Status remains **FULL**.

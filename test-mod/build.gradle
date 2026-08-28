@@ -18,6 +18,7 @@ minecraft {
 
 dependencies {
     minecraft "net.minecraftforge:forge:${rootProject.ext.minecraftVersion}-${rootProject.ext.forgeVersion}"
+    implementation project(':bukkit-api')
 }
 
 jar {

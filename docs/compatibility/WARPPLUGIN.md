@@ -80,3 +80,14 @@ After clean shutdown, `plugins/WarpPlugin/config.yml` contained an empty `warpli
 ## Final classification
 
 **FULL** — every command, alias, persistence path, message color and teleport behavior advertised by the pinned WarpPlugin 1.0 source was validated on the stated test runtime.
+
+## Phase 9.2 regression
+
+After the Permission Core changed player and command-sender composition, the
+pinned external artifact completed two additional clean boots. A Forge-backed
+test player exercised `addwarp`, `warps`, `warp` and `remwarp`; each dispatch
+returned success, real teleport coordinates matched the saved location, the
+deleted warp produced the expected missing path, and `config.yml` persisted an
+empty `warplist` before restart. The second boot repeated the command/teleport
+proof successfully. No WarpPlugin `ERROR`/`FATAL` or unsupported diagnostic was
+emitted. Status remains **FULL**.

@@ -2,6 +2,7 @@ plugins { id 'java' }
 
 dependencies {
     compileOnly project(':bukkit-api')
+    compileOnly project(':runtime-core')
 }
 
 jar {

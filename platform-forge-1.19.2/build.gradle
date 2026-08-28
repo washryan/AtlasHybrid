@@ -55,7 +55,26 @@ minecraft {
 
 def manualRunDirectory = rootProject.file('run-manual')
 def compatibilityRunDirectory = rootProject.file('run-compat')
+def integrationRunDirectory = rootProject.file('run')
 def manualServerProperties = project.file('manual/server.properties')
+
+tasks.register('prepareIntegrationServer') {
+    group = 'atlashybrid'
+    description = 'Copies the current internal test plugin into the automated integration run.'
+    dependsOn ':test-plugin:jar'
+
+    inputs.file(project(':test-plugin').tasks.named('jar').flatMap { it.archiveFile })
+    outputs.file(new File(integrationRunDirectory, 'plugins/AtlasHybridTestPlugin.jar'))
+
+    doLast {
+        new File(integrationRunDirectory, 'plugins').mkdirs()
+        copy {
+            from project(':test-plugin').tasks.named('jar').flatMap { it.archiveFile }
+            into new File(integrationRunDirectory, 'plugins')
+            rename { 'AtlasHybridTestPlugin.jar' }
+        }
+    }
+}
 
 tasks.register('prepareManualServer') {
     group = 'atlashybrid'
@@ -127,6 +146,10 @@ tasks.matching { manualServerRequested && it.name == 'runServer' }.configureEach
 tasks.matching { compatibilityServerRequested && it.name == 'runServer' }.configureEach {
     dependsOn tasks.named('prepareCompatServer')
     standardInput = System.in
+}
+
+tasks.matching { !manualServerRequested && !compatibilityServerRequested && it.name == 'runServer' }.configureEach {
+    dependsOn tasks.named('prepareIntegrationServer')
 }
 
 dependencies {

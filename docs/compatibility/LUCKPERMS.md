@@ -104,6 +104,38 @@ services manager, a versioned generic provider SPI with a neutral fixture, and
 behavioral tests. It must not claim LuckPerms support or add a hidden LuckPerms
 workaround. LuckPerms adapter integration is a later, separately reviewed phase.
 
+## Phase 9.2 raw boot #2
+
+The generic Permission Core is now implemented, including Bukkit permission
+defaults and attachments, stable player/console composition, provider priority
+and failure fallback, services priority/lookup, and plugin-owned lifecycle
+cleanup. This code has no LuckPerms-specific branch.
+
+The official, unmodified LuckPerms artifact was booted again. The former first
+missing symbol, `org.bukkit.command.ConsoleCommandSender`, is no longer the
+blocker. The new first failure is:
+
+```text
+Caused by: java.lang.IllegalStateException:
+Plugin has not been initialized by AtlasHybrid
+    at org.bukkit.plugin.java.JavaPlugin.getLogger(...)
+    at me.lucko.luckperms.bukkit.LPBukkitBootstrap.<init>(...:104)
+```
+
+Classification: **ARCHITECTURAL**. `LPBukkitBootstrap` is a nested
+`JavaPlugin` created reflectively by LuckPerms' jar-in-jar loader and reads its
+logger during construction. AtlasHybrid currently initializes the discovered
+main `JavaPlugin` only after its constructor returns. Supporting this pattern
+requires a generic decision for Bukkit `JavaPlugin` construction context and
+plugin classloader lifecycle. The observed failure is not a missing public API
+symbol and does not yet enter the later CraftBukkit `CraftHumanEntity#perm`
+injection path.
+
+Per the Phase 9.2 stop gate, AtlasHybrid does not implement that next loader
+architecture here. LuckPerms remains **BLOCKED** while compatibility continues
+to be developed; the implemented Permission Core is not a LuckPerms support
+claim. The original stack trace remains present in the raw-boot log.
+
 ## AtlasHybrid regression evidence
 
 The research/documentation change does not alter runtime code. Two fully clean
