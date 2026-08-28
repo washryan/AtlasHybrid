@@ -343,3 +343,39 @@ The Phase 9.7 proof also emits `EVENT_EXECUTOR_OK` exactly once. WelcomeMessage
 and WarpPlugin remain `FULL`. LuckPerms remains **BLOCKED** and unsupported; no
 LuckPerms-specific code, CraftBukkit shape, NMS, Mixin or instrumentation was
 added.
+
+## Phase 9.8 raw boot #8
+
+Phase 9.8 added a real Java `Material` enum backed by the complete modern
+vanilla block/item identifier union for Minecraft 1.19.2, plus `NamespacedKey`,
+`Keyed` and the Bukkit-compatible `Block#getType(): Material` bridge. The
+unchanged LuckPerms artifact found both `BLUE_ICE` and `NETHERITE_PICKAXE`, so
+`BukkitComponentSerializer` passed its Material version checks.
+
+The next first failure is:
+
+```text
+[AtlasHybrid Compatibility]
+Plugin: LuckPerms
+Missing API: org.bukkit.Bukkit#getUnsafe()
+Status: NOT_IMPLEMENTED
+Runtime: 0.1.0-alpha
+
+java.lang.NoSuchMethodError:
+'org.bukkit.UnsafeValues org.bukkit.Bukkit.getUnsafe()'
+    at me.lucko.luckperms.lib.adventure.platform.bukkit.BukkitComponentSerializer.<clinit>(BukkitComponentSerializer.java:66)
+    at me.lucko.luckperms.lib.adventure.platform.bukkit.BukkitFacet$Message.createMessage(BukkitFacet.java:76)
+    at me.lucko.luckperms.common.plugin.AbstractLuckPermsPlugin.enable(AbstractLuckPermsPlugin.java:158)
+```
+
+Classification: **CORE_API**. The observed call needs
+`UnsafeValues#getDataVersion()` so Adventure can select the Minecraft JSON
+serializer data version. It is not an `ItemStack`, inventory, Bukkit Registry,
+CraftBukkit, NMS or Mixin boundary, but `UnsafeValues` is a separate public API
+surface and was not implemented after the stop gate.
+
+Failed-enable cleanup again completed despite LuckPerms' suppressed partial
+shutdown NPE. No attributable live thread remained. Minecraft accepted `stop`,
+saved every dimension, and the Gradle launcher exited normally. LuckPerms
+remains **BLOCKED** and unsupported because its later permission injection still
+depends on CraftBukkit implementation shape.

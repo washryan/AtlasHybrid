@@ -230,6 +230,6 @@ class RuntimeCoreTest {
         @Override public int getX() { return 1; }
         @Override public int getY() { return 2; }
         @Override public int getZ() { return 3; }
-        @Override public String getType() { return "minecraft:stone"; }
+        @Override public org.bukkit.Material getType() { return org.bukkit.Material.STONE; }
     }
 }

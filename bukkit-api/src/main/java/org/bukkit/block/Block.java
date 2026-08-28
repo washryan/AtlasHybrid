@@ -1,5 +1,7 @@
 package org.bukkit.block;
 
+import org.bukkit.Material;
+
 public interface Block {
     int getX();
 
@@ -7,5 +9,5 @@ public interface Block {
 
     int getZ();
 
-    String getType();
+    Material getType();
 }

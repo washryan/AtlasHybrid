@@ -305,3 +305,32 @@ In raw boot #7, LuckPerms' partial `onDisable` threw because `webEditorStore` wa
 not initialized; the exception was suppressed onto the original failure and did
 not block rollback. No attributable live threads remained, and normal `stop`
 ended both Minecraft and the Gradle launcher without manual interruption.
+
+## Phase 9.8 observed Material boundary
+
+Bytecode inspection of the exact remapped Adventure platform library downloaded
+by LuckPerms showed that `BukkitComponentSerializer` uses `Material` only to
+look up enum constants `BLUE_ICE` and `NETHERITE_PICKAXE` through its generic
+enum-reflection helper. It does not perform a Material registry lookup and does
+not reference `ItemStack` in this initialization path.
+
+AtlasHybrid nevertheless implements the complete vanilla 1.19.2 block/item
+identifier union rather than a two-constant compatibility stub. Raw boot #8
+passed both enum probes and reached the next bytecode instruction:
+
+| Item | Classification |
+|---|---|
+| Passed boundary | `BukkitComponentSerializer.<clinit>:50` -> `Material.BLUE_ICE` / `NETHERITE_PICKAXE` enum lookup |
+| New symbol/path | `BukkitComponentSerializer.<clinit>:66` -> `Bukkit#getUnsafe(): UnsafeValues` |
+| Downstream method visible in bytecode | `UnsafeValues#getDataVersion(): int` |
+| Diagnostic | `Missing API: org.bukkit.Bukkit#getUnsafe()`, `Status: NOT_IMPLEMENTED` |
+| Lifecycle phase | `BukkitLoaderPlugin.onEnable`, while constructing the first Adventure message serializer |
+| ItemStack or inventory? | Not reached and not referenced by this class; deferred |
+| Bukkit Registry? | Not reached; deferred |
+| CraftBukkit internals? | No at this point; the known later permission injection remains unreached |
+| Category | **CORE_API** |
+| Phase 9.8 action | Stop and document; do not implement `UnsafeValues` or continue the cascade |
+
+The process behavior matched raw boot #7: best-effort disable produced the same
+suppressed LuckPerms partial-initialization NPE, AtlasHybrid rollback completed,
+no plugin-owned live thread was diagnosed, and normal `stop` ended the launcher.

@@ -7,6 +7,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import org.bukkit.Location;
+import org.bukkit.Material;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -151,6 +152,10 @@ public final class AtlasHybridTestPlugin extends JavaPlugin implements Listener,
     @EventHandler
     public void onBlockBreak(BlockBreakEvent event) {
         getLogger().info("[AtlasHybridPermissionProof] blockIdentityStable=" + (event.getPlayer() == sessionPlayer));
+        if (event.getBlock().getType() != Material.STONE) {
+            throw new IllegalStateException("Expected Material.STONE but got " + event.getBlock().getType());
+        }
+        getLogger().info("[AtlasHybridIntegration] MATERIAL_API_OK");
         getLogger().info("[AtlasHybridTestPlugin] BlockBreakEvent: " + event.getBlock().getType());
         if (getConfig().getBoolean("cancel-block-break", false)) {
             event.setCancelled(true);
