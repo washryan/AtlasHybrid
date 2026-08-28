@@ -41,4 +41,8 @@ public final class Bukkit {
     public static String getBukkitVersion() {
         return getServer().getBukkitVersion();
     }
+
+    public static World getWorld(String name) {
+        return getServer().getWorld(name);
+    }
 }

@@ -1,12 +1,15 @@
 package org.bukkit.plugin.java;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Set;
 import java.util.logging.Logger;
 import org.bukkit.Server;
+import org.bukkit.World;
 import org.bukkit.command.PluginCommand;
 import org.bukkit.plugin.PluginDescriptionFile;
 import org.bukkit.plugin.PluginManager;
@@ -29,6 +32,17 @@ class JavaPluginLifecycleTest {
         assertEquals(List.of("load", "enable", "disable"), plugin.calls);
     }
 
+    @Test
+    void saveConfigPersistsCurrentConfiguration() throws Exception {
+        CountingPlugin plugin = new CountingPlugin();
+        plugin.atlasInitialize(new EmptyServer(), new PluginDescriptionFile("Test", "1", "example.Test", null, null, List.of(), List.of(), List.of(), Set.of()), temp.toFile(), Logger.getAnonymousLogger());
+        plugin.getConfig().set("warplist", List.of("home"));
+        plugin.saveConfig();
+        assertTrue(Files.readString(temp.resolve("config.yml")).contains("home"));
+        plugin.reloadConfig();
+        assertEquals(List.of("home"), plugin.getConfig().getStringList("warplist"));
+    }
+
     private static final class CountingPlugin extends JavaPlugin {
         private final java.util.ArrayList<String> calls = new java.util.ArrayList<>();
         @Override public void onLoad() { calls.add("load"); }
@@ -47,6 +61,7 @@ class JavaPluginLifecycleTest {
         @Override public PluginManager getPluginManager() { return null; }
         @Override public BukkitScheduler getScheduler() { return null; }
         @Override public PluginCommand getPluginCommand(String name) { return null; }
+        @Override public World getWorld(String name) { return null; }
         @Override public Logger getLogger() { return Logger.getAnonymousLogger(); }
     }
 }

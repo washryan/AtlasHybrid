@@ -26,5 +26,7 @@ public interface Server {
 
     PluginCommand getPluginCommand(String name);
 
+    World getWorld(String name);
+
     Logger getLogger();
 }

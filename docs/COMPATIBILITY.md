@@ -7,9 +7,10 @@ Compatibility is assigned from observed behavior on AtlasHybrid, not from a perc
 - **INCOMPATIBLE:** the plugin could not complete startup or its primary behavior could not run.
 - **UNTESTED:** no controlled AtlasHybrid execution has been completed.
 
-| Plugin | Version | Result | Validated behavior | Notes |
-|---|---:|---|---|---|
-| AtlasHybridTestPlugin | 0.1.0-alpha | FULL | Lifecycle, commands, player events, block-break cancellation, scheduler and unsupported-API diagnostic | Internal integration fixture |
-| WelcomeMessage | 1.0 | FULL | Discovery, config extraction/read, enable, real `PlayerJoinEvent`, configured chat message, clean stop and restart | External plugin tested from pinned upstream source; not bundled |
+| Plugin | Version | MC target | Status | Validated behavior | Notes |
+|---|---:|---:|---|---|---|
+| AtlasHybridTestPlugin | 0.1.0-alpha | 1.19.2 | ✅ FULL | Lifecycle, commands, player events, block-break cancellation, scheduler and unsupported-API diagnostic | Internal integration fixture |
+| WelcomeMessage | 1.0 | 1.18 API / tested on 1.19.2 | ✅ FULL | Discovery, config extraction/read, enable, real `PlayerJoinEvent`, configured chat message, clean stop and restart | Pinned external source; not bundled |
+| WarpPlugin | 1.0 | 1.17 API / tested on 1.19.2 | ✅ FULL | Four commands and aliases, real position capture/teleport, colored feedback, YAML list/location persistence, deletion and clean restart | Pinned external source; not bundled |
 
-See [the WelcomeMessage compatibility report](compatibility/WELCOME_MESSAGE.md) for scope, provenance and evidence.
+See the detailed reports for [WelcomeMessage](compatibility/WELCOME_MESSAGE.md) and [WarpPlugin](compatibility/WARPPLUGIN.md) for scope, provenance and evidence.

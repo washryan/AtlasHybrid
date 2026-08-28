@@ -111,6 +111,12 @@ public abstract class JavaPlugin implements Plugin {
         }
     }
 
+    public final synchronized void saveConfig() {
+        requireInitialized();
+        if (config == null) return;
+        YamlConfiguration.saveConfiguration(config, dataFolder.toPath().resolve("config.yml"));
+    }
+
     private void requireInitialized() {
         if (!initialized) {
             throw new IllegalStateException("Plugin has not been initialized by AtlasHybrid");

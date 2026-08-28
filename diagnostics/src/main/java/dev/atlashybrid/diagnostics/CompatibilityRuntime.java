@@ -35,6 +35,34 @@ public final class CompatibilityRuntime {
         return new CompatibilityException(new CompatibilityDiagnostic(Instant.now(), plugin, api, module, status, "Diagnostics collector is not installed"));
     }
 
+    public static boolean reportLinkageFailure(Throwable throwable) {
+        Throwable linkage = findLinkageFailure(throwable);
+        CompatibilityCollector current = collector;
+        if (linkage == null || current == null) return false;
+        current.missing(Objects.requireNonNullElse(CURRENT_PLUGIN.get(), "UNKNOWN"), symbol(linkage), linkage);
+        return true;
+    }
+
+    private static Throwable findLinkageFailure(Throwable throwable) {
+        for (Throwable current = throwable; current != null; current = current.getCause()) {
+            if (current instanceof NoSuchMethodError || current instanceof AbstractMethodError
+                || current instanceof NoClassDefFoundError || current instanceof ClassNotFoundException) return current;
+        }
+        return null;
+    }
+
+    private static String symbol(Throwable failure) {
+        String message = Objects.requireNonNullElse(failure.getMessage(), failure.getClass().getName()).replace('/', '.');
+        if (failure instanceof NoSuchMethodError || failure instanceof AbstractMethodError) {
+            message = message.replace("'", "");
+            int open = message.indexOf('(');
+            int dot = open < 0 ? -1 : message.lastIndexOf('.', open);
+            int space = dot < 0 ? -1 : message.lastIndexOf(' ', dot);
+            if (dot >= 0) message = message.substring(space + 1, dot) + "#" + message.substring(dot + 1);
+        }
+        return message;
+    }
+
     @FunctionalInterface
     public interface Scope extends AutoCloseable {
         @Override void close();

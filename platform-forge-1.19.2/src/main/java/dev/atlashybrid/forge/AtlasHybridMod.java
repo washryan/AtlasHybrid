@@ -1,6 +1,7 @@
 package dev.atlashybrid.forge;
 
 import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.brigadier.arguments.StringArgumentType;
 import dev.atlashybrid.diagnostics.CompatibilityCollector;
 import dev.atlashybrid.diagnostics.CompatibilityRuntime;
 import dev.atlashybrid.loader.DependencyResolutionException;
@@ -44,6 +45,7 @@ public final class AtlasHybridMod {
     private CommandRegistry commands;
     private ForgeServerAdapter serverAdapter;
     private PluginRuntime pluginRuntime;
+    private CompatibilityCollector compatibilityCollector;
 
     public AtlasHybridMod() {
         configureLogging();
@@ -79,7 +81,8 @@ public final class AtlasHybridMod {
         pluginManager = new AtlasPluginManager(LOGGER);
         scheduler = new AtlasScheduler(LOGGER);
         commands = new CommandRegistry();
-        CompatibilityRuntime.install(new CompatibilityCollector(LOGGER));
+        compatibilityCollector = new CompatibilityCollector(LOGGER, VERSION);
+        CompatibilityRuntime.install(compatibilityCollector);
         serverAdapter = new ForgeServerAdapter(event.getServer(), pluginManager, scheduler, commands);
         Bukkit.setServer(serverAdapter);
         pluginRuntime = new PluginRuntime(serverAdapter, pluginManager, commands, scheduler, LOGGER, AtlasHybridMod.class.getClassLoader());
@@ -89,6 +92,7 @@ public final class AtlasHybridMod {
     public void onServerStarting(ServerStartingEvent event) {
         try {
             pluginRuntime.loadAll(Path.of("plugins"));
+            registerPluginCommands(event.getServer().getCommands().getDispatcher());
         } catch (IOException | DependencyResolutionException exception) {
             LOGGER.log(Level.SEVERE, "AtlasHybrid plugin discovery failed", exception);
         }
@@ -98,6 +102,10 @@ public final class AtlasHybridMod {
     public void onServerStarted(ServerStartedEvent event) {
         pluginRuntime.enableAll();
         LOGGER.info("[AtlasHybrid] " + pluginRuntime.loadedCount() + " plugin(s) loaded and enable phase completed");
+        LOGGER.info("[AtlasHybrid Compatibility]\n"
+            + "Plugins discovered: " + pluginRuntime.discoveredCount() + "\n"
+            + "Loaded: " + pluginRuntime.loadedCount() + "\n"
+            + "Unsupported: " + compatibilityCollector.totalUnsupportedCalls());
     }
 
     @SubscribeEvent
@@ -109,6 +117,26 @@ public final class AtlasHybridMod {
         dispatcher.register(Commands.literal("atlas")
             .executes(context -> dispatch(context.getSource(), new String[0]))
             .then(Commands.literal("info").executes(context -> dispatch(context.getSource(), new String[] { "info" }))));
+    }
+
+    private void registerPluginCommands(CommandDispatcher<CommandSourceStack> dispatcher) {
+        for (String name : commands.names()) {
+            if ("atlas".equals(name)) continue;
+            dispatcher.register(Commands.literal(name)
+                .executes(context -> dispatchPlugin(name, context.getSource(), new String[0]))
+                .then(Commands.argument("args", StringArgumentType.greedyString())
+                    .executes(context -> dispatchPlugin(name, context.getSource(), splitArguments(StringArgumentType.getString(context, "args"))))));
+        }
+    }
+
+    private int dispatchPlugin(String name, CommandSourceStack source, String[] args) {
+        if (!commands.dispatch(name, ForgeCommandSender.of(source), args)) return 0;
+        return 1;
+    }
+
+    private static String[] splitArguments(String raw) {
+        String value = raw.strip();
+        return value.isEmpty() ? new String[0] : value.split("\\s+");
     }
 
     private int dispatch(CommandSourceStack source, String[] args) {
@@ -165,5 +193,6 @@ public final class AtlasHybridMod {
         scheduler = null;
         commands = null;
         serverAdapter = null;
+        compatibilityCollector = null;
     }
 }

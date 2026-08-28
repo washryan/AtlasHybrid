@@ -24,6 +24,6 @@ class DependencyResolverTest {
     }
 
     private static PluginCandidate candidate(String name, List<String> depend) {
-        return new PluginCandidate(Path.of(name + ".jar"), new PluginMetadata(name, "1", "example." + name, null, null, List.of(), depend, List.of(), Set.of()));
+        return new PluginCandidate(Path.of(name + ".jar"), new PluginMetadata(name, "1", "example." + name, null, null, List.of(), depend, List.of(), Set.of(), java.util.Map.of()));
     }
 }

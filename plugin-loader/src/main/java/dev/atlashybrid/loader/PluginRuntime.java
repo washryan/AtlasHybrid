@@ -38,6 +38,7 @@ public final class PluginRuntime implements AutoCloseable {
     private final List<LoadedPlugin> loaded = new ArrayList<>();
     private final PluginMetadataParser parser = new PluginMetadataParser();
     private final DependencyResolver resolver = new DependencyResolver();
+    private int discoveredCount;
 
     public PluginRuntime(Server server, AtlasPluginManager pluginManager, CommandRegistry commands, AtlasScheduler scheduler, Logger logger, ClassLoader apiClassLoader) {
         this.server = server;
@@ -60,6 +61,7 @@ public final class PluginRuntime implements AutoCloseable {
                 }
             }
         }
+        discoveredCount = candidates.size();
         List<PluginCandidate> order = resolver.resolve(candidates);
         Map<String, LoadedPlugin> byName = new HashMap<>();
         for (PluginCandidate candidate : order) {
@@ -73,6 +75,7 @@ public final class PluginRuntime implements AutoCloseable {
                 loaded.add(plugin);
                 byName.put(key(candidate.metadata().name()), plugin);
             } catch (Throwable throwable) {
+                reportLinkage(candidate.metadata().name(), throwable);
                 logger.log(Level.SEVERE, "Failed to load plugin " + candidate.metadata().name(), throwable);
             }
         }
@@ -96,7 +99,12 @@ public final class PluginRuntime implements AutoCloseable {
             Logger pluginLogger = Logger.getLogger("AtlasHybrid.Plugin." + candidate.metadata().name());
             plugin.atlasInitialize(server, candidate.metadata().toDescription(), dataPath.toFile(), pluginLogger);
             pluginManager.addPlugin(plugin);
-            for (String command : candidate.metadata().commands()) commands.register(command, plugin);
+            for (String commandName : candidate.metadata().commands()) {
+                org.bukkit.command.PluginCommand command = commands.register(commandName, plugin);
+                for (String alias : candidate.metadata().commandAliases().getOrDefault(commandName, Set.of())) {
+                    commands.registerAlias(alias, command);
+                }
+            }
             try (CompatibilityRuntime.Scope ignored = CompatibilityRuntime.enter(plugin.getName())) {
                 plugin.onLoad();
             }
@@ -121,6 +129,7 @@ public final class PluginRuntime implements AutoCloseable {
                 }
                 logger.info("Enabled plugin " + item.plugin().getDescription().getFullName());
             } catch (Throwable throwable) {
+                reportLinkage(item.plugin().getName(), throwable);
                 logger.log(Level.SEVERE, "Failed to enable plugin " + item.plugin().getName(), throwable);
             }
         }
@@ -135,7 +144,10 @@ public final class PluginRuntime implements AutoCloseable {
             commands.unregister(plugin);
             if (plugin.isEnabled()) {
                 try (CompatibilityRuntime.Scope ignored = CompatibilityRuntime.enter(plugin.getName())) { plugin.atlasSetEnabled(false); }
-                catch (Throwable throwable) { logger.log(Level.SEVERE, "Failed to disable plugin " + plugin.getName(), throwable); }
+                catch (Throwable throwable) {
+                    reportLinkage(plugin.getName(), throwable);
+                    logger.log(Level.SEVERE, "Failed to disable plugin " + plugin.getName(), throwable);
+                }
             }
             pluginManager.unregisterPlugin(plugin, KNOWN_EVENTS);
         }
@@ -152,6 +164,13 @@ public final class PluginRuntime implements AutoCloseable {
     }
 
     public int loadedCount() { return loaded.size(); }
+    public int discoveredCount() { return discoveredCount; }
     public List<LoadedPlugin> loadedPlugins() { return List.copyOf(loaded); }
     private static String key(String value) { return value.toLowerCase(Locale.ROOT); }
+
+    private static void reportLinkage(String plugin, Throwable throwable) {
+        try (CompatibilityRuntime.Scope ignored = CompatibilityRuntime.enter(plugin)) {
+            CompatibilityRuntime.reportLinkageFailure(throwable);
+        }
+    }
 }

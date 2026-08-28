@@ -1,6 +1,7 @@
 package dev.atlashybrid.testplugin;
 
 import java.util.Arrays;
+import org.bukkit.Location;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -60,6 +61,17 @@ public final class AtlasHybridTestPlugin extends JavaPlugin implements Listener,
     @EventHandler
     public void onJoin(PlayerJoinEvent event) {
         getLogger().info("[AtlasHybridTestPlugin] PlayerJoinEvent: " + event.getPlayer().getName());
+        Location before = event.getPlayer().getLocation();
+        Location target = new Location(before.getWorld(), before.getX() + 0.25D, before.getY(), before.getZ(), before.getYaw(), before.getPitch());
+        boolean teleported = event.getPlayer().teleport(target);
+        Location after = event.getPlayer().getLocation();
+        boolean positionMatches = Math.abs(after.getX() - target.getX()) < 0.001D
+            && Math.abs(after.getY() - target.getY()) < 0.001D
+            && Math.abs(after.getZ() - target.getZ()) < 0.001D;
+        getLogger().info("[AtlasHybridTestPlugin] Location/teleport bridge: teleported=" + teleported
+            + " positionMatches=" + positionMatches
+            + " target=" + target.getX() + "," + target.getY() + "," + target.getZ()
+            + " actual=" + after.getX() + "," + after.getY() + "," + after.getZ());
         try {
             event.getPlayer().getDisplayName();
         } catch (UnsupportedOperationException expected) {

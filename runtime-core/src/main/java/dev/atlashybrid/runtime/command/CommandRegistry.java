@@ -4,6 +4,7 @@ import dev.atlashybrid.diagnostics.CompatibilityRuntime;
 import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.PluginCommand;
 import org.bukkit.plugin.Plugin;
@@ -24,6 +25,15 @@ public final class CommandRegistry {
         return commands.get(key(name));
     }
 
+    public synchronized void registerAlias(String alias, PluginCommand command) {
+        String key = key(alias);
+        if (commands.putIfAbsent(key, command) != null) throw new IllegalStateException("Duplicate plugin command alias: " + alias);
+    }
+
+    public synchronized Set<String> names() {
+        return Set.copyOf(commands.keySet());
+    }
+
     public synchronized void unregister(Plugin plugin) {
         commands.values().removeIf(command -> command.getPlugin() == plugin);
     }
@@ -32,7 +42,14 @@ public final class CommandRegistry {
         PluginCommand command = get(name);
         if (command == null) return false;
         try (CompatibilityRuntime.Scope ignored = CompatibilityRuntime.enter(command.getPlugin().getName())) {
-            return command.execute(sender, command.getName(), args);
+            try {
+                return command.execute(sender, command.getName(), args);
+            } catch (Throwable throwable) {
+                CompatibilityRuntime.reportLinkageFailure(throwable);
+                if (throwable instanceof RuntimeException exception) throw exception;
+                if (throwable instanceof Error error) throw error;
+                throw new IllegalStateException("Plugin command failed", throwable);
+            }
         }
     }
 

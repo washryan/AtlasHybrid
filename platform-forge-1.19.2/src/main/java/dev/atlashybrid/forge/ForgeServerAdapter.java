@@ -5,9 +5,12 @@ import dev.atlashybrid.runtime.event.AtlasPluginManager;
 import dev.atlashybrid.runtime.scheduler.AtlasScheduler;
 import java.util.logging.Logger;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.Level;
 import net.minecraftforge.fml.ModList;
 import net.minecraftforge.versions.forge.ForgeVersion;
 import org.bukkit.Server;
+import org.bukkit.World;
 import org.bukkit.command.PluginCommand;
 import org.bukkit.plugin.PluginManager;
 import org.bukkit.scheduler.BukkitScheduler;
@@ -35,5 +38,22 @@ final class ForgeServerAdapter implements Server {
     @Override public PluginManager getPluginManager() { return pluginManager; }
     @Override public BukkitScheduler getScheduler() { return scheduler; }
     @Override public PluginCommand getPluginCommand(String name) { return commands.get(name); }
+    @Override public World getWorld(String name) {
+        for (ServerLevel level : minecraftServer.getAllLevels()) {
+            String bukkitName = worldName(level);
+            if (bukkitName.equalsIgnoreCase(name) || level.dimension().location().toString().equalsIgnoreCase(name)) {
+                return new ForgeWorldAdapter(level, bukkitName);
+            }
+        }
+        return null;
+    }
     @Override public Logger getLogger() { return Logger.getLogger("AtlasHybrid"); }
+
+    String worldName(ServerLevel level) {
+        String root = minecraftServer.getWorldData().getLevelName();
+        if (level.dimension() == Level.OVERWORLD) return root;
+        if (level.dimension() == Level.NETHER) return root + "_nether";
+        if (level.dimension() == Level.END) return root + "_the_end";
+        return level.dimension().location().toString();
+    }
 }

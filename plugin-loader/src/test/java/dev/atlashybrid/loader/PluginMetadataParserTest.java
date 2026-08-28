@@ -25,11 +25,14 @@ class PluginMetadataParserTest {
             commands:
               atlas:
                 description: status
+                aliases:
+                  - ah
             """);
         assertEquals("AtlasTest", metadata.name());
         assertEquals(List.of("One", "Two"), metadata.authors());
         assertEquals(List.of("RequiredPlugin"), metadata.depend());
         assertEquals(Set.of("atlas"), metadata.commands());
+        assertEquals(Set.of("ah"), metadata.commandAliases().get("atlas"));
     }
 
     @Test

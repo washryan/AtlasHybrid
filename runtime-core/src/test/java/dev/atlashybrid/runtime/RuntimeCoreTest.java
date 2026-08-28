@@ -14,6 +14,8 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Logger;
 import org.bukkit.Server;
+import org.bukkit.Location;
+import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.command.CommandSender;
 import org.bukkit.configuration.file.FileConfiguration;
@@ -37,6 +39,18 @@ class RuntimeCoreTest {
         assertTrue(registry.dispatch("ATLAS", sender, new String[] { "info" }));
         assertEquals(1, calls.get());
         assertEquals("atlas:info", sender.message);
+    }
+
+    @Test
+    void commandAliasesDispatchToTheOwnedCommand() {
+        CommandRegistry registry = new CommandRegistry();
+        FakePlugin plugin = new FakePlugin();
+        var command = registry.register("warplist", plugin);
+        command.setExecutor((sender, ignored, label, args) -> true);
+        registry.registerAlias("warps", command);
+        assertTrue(registry.dispatch("warps", new FakeSender(), new String[0]));
+        assertEquals(command, registry.get("warps"));
+        assertTrue(registry.names().containsAll(Set.of("warplist", "warps")));
     }
 
     @Test
@@ -97,6 +111,8 @@ class RuntimeCoreTest {
     private static final class FakePlayer extends FakeSender implements Player {
         @Override public UUID getUniqueId() { return UUID.fromString("00000000-0000-0000-0000-000000000001"); }
         @Override public String getDisplayName() { return getName(); }
+        @Override public Location getLocation() { return null; }
+        @Override public boolean teleport(Location location) { return false; }
     }
 
     private static final class FakeBlock implements Block {

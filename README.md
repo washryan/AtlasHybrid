@@ -39,25 +39,36 @@ Never point the development `run/` directory at a personal or production server.
 ## Supported APIs
 
 - `Plugin` and `JavaPlugin` lifecycle: `onLoad`, `onEnable`, `onDisable`
-- basic plugin logger and flat `config.yml`
+- basic plugin logger and deterministic YAML configuration for scalars, string lists and locations
 - `Bukkit`, minimal `Server`, `PluginManager`
 - `Command`, `PluginCommand`, `CommandSender`
-- `Player`, `Listener`, `Event`, `HandlerList`
+- `Player`, `World`, `Location`, `ChatColor`, `Listener`, `Event`, `HandlerList`
+- real player position reads and same-server/dimension teleportation
 - `PlayerJoinEvent`, `PlayerQuitEvent`, `BlockBreakEvent`
 - synchronous `runTask` and `runTaskLater`
 
 ## Known limitations
 
-- Only the API required by `AtlasHybridTestPlugin` exists.
+- Only the API required by the validated compatibility targets exists.
 - No CraftBukkit/NMS, Spigot API, Paper API, plugin remapping, async scheduler, hot reload, or reload command.
 - Plugin classloading is stricter than legacy Bukkit and only exposes declared dependencies.
 - The first command bridge reserves `/atlas` and `/atlas info`.
 
 ## Compatibility
 
-Only `AtlasHybridTestPlugin` is an acceptance target for this alpha. A plugin JAR
-being discovered does not mean it is compatible. Unsupported calls are reported
-under `[AtlasHybrid Compatibility]` with stable diagnostic codes.
+Compatibility is evidence-based: discovery alone is never treated as support.
+The current matrix includes the internal acceptance fixture and two external,
+pinned open-source plugins tested without source modification. External plugin
+artifacts are not bundled. See the [compatibility matrix](docs/COMPATIBILITY.md)
+and the [WarpPlugin report](docs/compatibility/WARPPLUGIN.md).
+
+- AtlasHybridTestPlugin `0.1.0-alpha`: **FULL**
+- WelcomeMessage `1.0`: **FULL**
+- WarpPlugin `1.0`: **FULL**
+
+Unsupported linkage is reported under `[AtlasHybrid Compatibility]` with the
+plugin, missing symbol, `NOT_IMPLEMENTED` status and runtime version before the
+original exception is preserved in the log.
 
 ## Building
 

@@ -45,8 +45,11 @@ public final class PluginMetadataParser {
         Map<String, String> scalars = new LinkedHashMap<>();
         Map<String, List<String>> lists = new LinkedHashMap<>();
         Set<String> commands = new LinkedHashSet<>();
+        Map<String, Set<String>> commandAliases = new LinkedHashMap<>();
         String activeList = null;
         boolean inCommands = false;
+        String activeCommand = null;
+        boolean inCommandAliases = false;
 
         for (String raw : yaml.replace("\r", "").split("\n", -1)) {
             String withoutComment = removeComment(raw);
@@ -57,6 +60,8 @@ public final class PluginMetadataParser {
             if (indent == 0) {
                 activeList = null;
                 inCommands = false;
+                activeCommand = null;
+                inCommandAliases = false;
                 int colon = line.indexOf(':');
                 if (colon < 1) throw new InvalidPluginMetadataException("Malformed plugin.yml line: " + line);
                 String key = line.substring(0, colon).strip().toLowerCase(Locale.ROOT);
@@ -71,10 +76,24 @@ public final class PluginMetadataParser {
                 } else {
                     scalars.put(key, stripQuotes(value));
                 }
-            } else if (inCommands && indent >= 2 && line.endsWith(":")) {
+            } else if (inCommands && indent == 2 && line.endsWith(":")) {
                 String command = line.substring(0, line.length() - 1).strip().toLowerCase(Locale.ROOT);
                 if (!PLUGIN_NAME.matcher(command).matches()) throw new InvalidPluginMetadataException("Invalid command name: " + command);
                 commands.add(command);
+                commandAliases.putIfAbsent(command, new LinkedHashSet<>());
+                activeCommand = command;
+                inCommandAliases = false;
+            } else if (inCommands && indent == 4 && activeCommand != null) {
+                int colon = line.indexOf(':');
+                if (colon < 1) continue;
+                String key = line.substring(0, colon).strip().toLowerCase(Locale.ROOT);
+                String value = line.substring(colon + 1).strip();
+                inCommandAliases = "aliases".equals(key) && value.isEmpty();
+                if ("aliases".equals(key) && value.startsWith("[") && value.endsWith("]")) {
+                    for (String alias : parseInlineList(value)) addAlias(commandAliases.get(activeCommand), alias);
+                }
+            } else if (inCommands && indent >= 6 && activeCommand != null && inCommandAliases && line.startsWith("-")) {
+                addAlias(commandAliases.get(activeCommand), stripQuotes(line.substring(1).strip()));
             } else if (activeList != null && line.startsWith("-")) {
                 String value = stripQuotes(line.substring(1).strip());
                 if (!value.isBlank()) lists.get(activeList).add(value);
@@ -95,7 +114,8 @@ public final class PluginMetadataParser {
             lists.getOrDefault("authors", List.of()),
             lists.getOrDefault("depend", List.of()),
             lists.getOrDefault("softdepend", List.of()),
-            commands
+            commands,
+            commandAliases
         );
     }
 
@@ -133,6 +153,7 @@ public final class PluginMetadataParser {
     }
 
     private static boolean isListKey(String key) { return "authors".equals(key) || "depend".equals(key) || "softdepend".equals(key); }
+    private static void addAlias(Set<String> aliases, String alias) throws InvalidPluginMetadataException { String value = alias.toLowerCase(Locale.ROOT); if (!PLUGIN_NAME.matcher(value).matches()) throw new InvalidPluginMetadataException("Invalid command alias: " + alias); aliases.add(value); }
     private static List<String> parseInlineList(String value) { List<String> result = new ArrayList<>(); String body = value.substring(1, value.length() - 1); for (String part : body.split(",")) { String item = stripQuotes(part.strip()); if (!item.isBlank()) result.add(item); } return result; }
     private static String stripQuotes(String value) { if (value.length() >= 2 && ((value.startsWith("\"") && value.endsWith("\"")) || (value.startsWith("'") && value.endsWith("'")))) return value.substring(1, value.length() - 1); return value; }
     private static String emptyToNull(String value) { return value == null || value.isBlank() ? null : value; }
