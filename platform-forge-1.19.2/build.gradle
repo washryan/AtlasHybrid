@@ -21,12 +21,17 @@ java { toolchain.languageVersion = JavaLanguageVersion.of(17) }
 def manualServerRequested = gradle.startParameter.taskNames.any {
     it == 'runManualServer' || it.endsWith(':runManualServer')
 }
+def compatibilityServerRequested = gradle.startParameter.taskNames.any {
+    it == 'runCompatServer' || it.endsWith(':runCompatServer')
+}
 
 minecraft {
     mappings channel: 'official', version: rootProject.ext.minecraftVersion
     runs {
         server {
-            workingDirectory project.file(manualServerRequested ? '../run-manual' : '../run')
+            workingDirectory project.file(
+                manualServerRequested ? '../run-manual' : compatibilityServerRequested ? '../run-compat' : '../run'
+            )
             forceExit false
             property 'forge.logging.console.level', 'info'
             property 'terminal.ansi', 'true'
@@ -38,7 +43,7 @@ minecraft {
                     source project(':plugin-loader').sourceSets.main
                     source project(':diagnostics').sourceSets.main
                 }
-                if (!manualServerRequested) {
+                if (!manualServerRequested && !compatibilityServerRequested) {
                     atlashybrid_test_mod {
                         source project(':test-mod').sourceSets.main
                     }
@@ -49,6 +54,7 @@ minecraft {
 }
 
 def manualRunDirectory = rootProject.file('run-manual')
+def compatibilityRunDirectory = rootProject.file('run-compat')
 def manualServerProperties = project.file('manual/server.properties')
 
 tasks.register('prepareManualServer') {
@@ -86,8 +92,40 @@ tasks.register('runManualServer') {
     dependsOn 'runServer'
 }
 
+tasks.register('prepareCompatServer') {
+    group = 'atlashybrid'
+    description = 'Prepares an isolated compatibility server without accepting the Minecraft EULA.'
+    inputs.file(manualServerProperties)
+    outputs.dir(compatibilityRunDirectory)
+
+    doLast {
+        ['plugins', 'mods', 'config', 'logs', 'world'].each {
+            new File(compatibilityRunDirectory, it).mkdirs()
+        }
+
+        File targetProperties = new File(compatibilityRunDirectory, 'server.properties')
+        if (!targetProperties.exists()) {
+            copy {
+                from manualServerProperties
+                into compatibilityRunDirectory
+            }
+        }
+    }
+}
+
+tasks.register('runCompatServer') {
+    group = 'atlashybrid'
+    description = 'Runs the isolated Forge server for external Bukkit plugin compatibility tests.'
+    dependsOn 'runServer'
+}
+
 tasks.matching { manualServerRequested && it.name == 'runServer' }.configureEach {
     dependsOn tasks.named('prepareManualServer')
+    standardInput = System.in
+}
+
+tasks.matching { compatibilityServerRequested && it.name == 'runServer' }.configureEach {
+    dependsOn tasks.named('prepareCompatServer')
     standardInput = System.in
 }
 

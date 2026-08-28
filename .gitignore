@@ -7,6 +7,7 @@ out/
 .vscode/
 /run/
 /run-manual/
+/run-compat/
 logs/
 world/
 crash-reports/
