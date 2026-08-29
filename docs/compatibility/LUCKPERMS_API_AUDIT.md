@@ -377,3 +377,47 @@ Rollback removed AtlasHybrid registrations, but two LuckPerms-owned metadata
 OkHttp threads created before this failure remained alive. Minecraft saved all
 dimensions after `stop`; the Gradle launcher required interruption because of
 those external threads.
+
+## Phase 9.10 server identity and next event boundary
+
+AtlasHybrid now obtains online-mode state directly from
+`MinecraftServer#usesAuthentication()`. The static Bukkit accessor delegates to
+the installed server instance, so no second configuration source exists. Raw
+boot #10 passed the former `BukkitConnectionListener` linker boundary and
+failed while Java reflection enumerated the declared methods of LuckPerms'
+listener class:
+
+| Item | Classification |
+|---|---|
+| Passed boundary | `BukkitConnectionListener.<init>:71` -> `Server#getOnlineMode()` |
+| New symbol/path | `LPBukkitPlugin.registerPlatformListeners:136` -> `PluginManager#registerEvents` -> `Class#getDeclaredMethods` -> `org.bukkit.event.player.AsyncPlayerPreLoginEvent` |
+| Diagnostic | `Missing API: org.bukkit.event.player.AsyncPlayerPreLoginEvent`, `Status: NOT_IMPLEMENTED` |
+| Lifecycle phase | `BukkitLoaderPlugin.onEnable`, during platform-listener registration |
+| Public API? | Yes; Bukkit asynchronous pre-login event contract |
+| CraftBukkit/NMS required for the type itself? | No, but correct dispatch belongs to a dedicated connection-event phase |
+| Category | **CORE_API** |
+| Phase 9.10 action | Stop and document; do not add the event or continue the cascade |
+
+### Failed-enable HTTP resource audit
+
+Bytecode inspection of the exact LuckPerms 5.5.81 artifact shows that
+`AbstractLuckPermsPlugin.enable()` constructs its own `OkHttpClient` and starts
+the translation repository refresh before `registerPlatformListeners()`. Its
+normal `disable()` path eventually shuts down the client's dispatcher executor
+and evicts its connection pool. On partial enable, however,
+`extensionManager.close()` is reached first and throws because the extension
+manager has not yet been initialized; the later HTTP cleanup is consequently
+skipped. This is case **B**: the plugin owns a client and intends to close it,
+but its disable path is not tolerant of this partial initialization point.
+AtlasHybrid does call the plugin's disable hook and then completes its own
+rollback; it is not suppressing a cleanup stage.
+
+Raw boot #9 recorded thread names `OkHttp metadata.luckperms.net` and
+`OkHttp metadata.luckperms.net Writer`, and their persistence after Minecraft
+stopped proves that at least one live resource prevented JVM exit. That older
+run predates structured capture, so exact daemon flags, context classloaders and
+stacks cannot be recovered from its log and are not guessed. Raw boot #10 ran
+with the enhanced monitor, but neither thread survived the failure snapshot;
+therefore no ownership confidence was assigned, and normal shutdown exited the
+launcher. The generic diagnostic remains covered by a controlled failed-enable
+fixture with `HIGH` context-classloader evidence.

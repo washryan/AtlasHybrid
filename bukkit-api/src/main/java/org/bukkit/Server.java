@@ -31,6 +31,8 @@ public interface Server {
 
     UnsafeValues getUnsafe();
 
+    boolean getOnlineMode();
+
     int getDetectedModCount();
 
     PluginManager getPluginManager();

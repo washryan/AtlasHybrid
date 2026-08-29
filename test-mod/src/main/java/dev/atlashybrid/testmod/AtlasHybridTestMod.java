@@ -84,6 +84,12 @@ public final class AtlasHybridTestMod {
 
         MinecraftForge.EVENT_BUS.post(new PlayerEvent.PlayerLoggedInEvent(player));
         org.bukkit.Server bukkitServer = org.bukkit.Bukkit.getServer();
+        boolean runtimeOnlineMode = server.usesAuthentication();
+        if (bukkitServer.getOnlineMode() != runtimeOnlineMode
+            || org.bukkit.Bukkit.getOnlineMode() != runtimeOnlineMode) {
+            throw new IllegalStateException("Bukkit online mode differs from Minecraft runtime state");
+        }
+        LOGGER.info("[AtlasHybridIntegration] SERVER_ONLINE_MODE_OK");
         org.bukkit.entity.Player onlinePlayer = bukkitServer.getPlayer(player.getUUID());
         if (bukkitServer.getOnlinePlayers().size() != 1
             || onlinePlayer == null

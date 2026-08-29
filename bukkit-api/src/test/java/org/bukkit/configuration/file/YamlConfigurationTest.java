@@ -162,6 +162,7 @@ class YamlConfigurationTest {
         @Override public String getForgeVersion() { return "43.5.0"; }
         @Override public String getAtlasHybridVersion() { return "0.1.0-alpha"; }
         @Override public org.bukkit.UnsafeValues getUnsafe() { return null; }
+        @Override public boolean getOnlineMode() { return true; }
         @Override public int getDetectedModCount() { return 0; }
         @Override public PluginManager getPluginManager() { return null; }
         @Override public org.bukkit.plugin.ServicesManager getServicesManager() { return null; }

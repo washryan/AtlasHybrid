@@ -52,6 +52,10 @@ public final class Bukkit {
         return getServer().getUnsafe();
     }
 
+    public static boolean getOnlineMode() {
+        return getServer().getOnlineMode();
+    }
+
     public static World getWorld(String name) {
         return getServer().getWorld(name);
     }

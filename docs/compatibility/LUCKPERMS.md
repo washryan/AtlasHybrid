@@ -426,3 +426,48 @@ as raw-boot behavior, not hidden as a clean shutdown.
 LuckPerms remains **BLOCKED** and unsupported. No `getOnlineMode`, connection
 events, ItemStack, Registry, CraftBukkit, NMS, Mixin or LuckPerms-specific code
 was added after the blocker.
+
+## Phase 9.10 raw boot #10
+
+Phase 9.10 implements the public server identity contract with
+`MinecraftServer#usesAuthentication()` as the runtime source of truth.
+`Server#getOnlineMode()` and `Bukkit#getOnlineMode()` therefore agree with the
+live dedicated server rather than reparsing `server.properties` or returning a
+constant. The unchanged LuckPerms artifact passed
+`BukkitConnectionListener.<init>` and advanced to registration of its platform
+listeners.
+
+The next first failure is:
+
+```text
+[AtlasHybrid Compatibility]
+Plugin: LuckPerms
+Missing API: org.bukkit.event.player.AsyncPlayerPreLoginEvent
+Status: NOT_IMPLEMENTED
+Runtime: 0.1.0-alpha
+
+java.lang.NoClassDefFoundError: org/bukkit/event/player/AsyncPlayerPreLoginEvent
+    at java.lang.Class.getDeclaredMethods0(Native Method)
+    at dev.atlashybrid.runtime.event.AtlasPluginManager.registerEvents(AtlasPluginManager.java:57)
+    at me.lucko.luckperms.bukkit.LPBukkitPlugin.registerPlatformListeners(LPBukkitPlugin.java:136)
+    at me.lucko.luckperms.common.plugin.AbstractLuckPermsPlugin.enable(AbstractLuckPermsPlugin.java:194)
+```
+
+Classification: **CORE_API**. `AsyncPlayerPreLoginEvent` is a public Bukkit
+connection event, not a CraftBukkit, NMS, Paper or Mixin symbol. Implementing
+its event class and correct asynchronous login lifecycle is a separate event
+compatibility phase, so the raw boot stopped at this boundary without adding a
+stub or cascading into later listeners.
+
+Best-effort disable again reached LuckPerms' partial-state
+`extensionManager.close()` null dereference, which AtlasHybrid retained as a
+suppressed exception before completing its own rollback. Unlike raw boot #9,
+no new live thread survived rollback long enough to be reported by the generic
+resource monitor: the log contains no `AtlasHybrid Plugin Resource` block and
+no OkHttp thread. Normal `stop` saved all dimensions and the Gradle launcher
+exited by itself. This run therefore does not claim a leak or manufacture an
+ownership result from thread names alone.
+
+LuckPerms remains **BLOCKED** overall because its known later permission
+injection relies on CraftBukkit implementation shape. The raw boot result is
+not a support claim.

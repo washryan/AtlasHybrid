@@ -60,6 +60,7 @@ final class ForgeServerAdapter implements Server {
     @Override public String getForgeVersion() { return ForgeVersion.getVersion(); }
     @Override public String getAtlasHybridVersion() { return AtlasHybridMod.VERSION; }
     @Override public UnsafeValues getUnsafe() { return unsafeValues; }
+    @Override public boolean getOnlineMode() { return minecraftServer.usesAuthentication(); }
     @Override public int getDetectedModCount() { return ModList.get().size(); }
     @Override public PluginManager getPluginManager() { return pluginManager; }
     @Override public ServicesManager getServicesManager() { return services; }

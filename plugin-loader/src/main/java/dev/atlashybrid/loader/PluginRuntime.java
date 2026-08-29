@@ -37,6 +37,7 @@ public final class PluginRuntime implements AutoCloseable {
     private final DependencyResolver resolver = new DependencyResolver();
     private final PluginThreadMonitor threadMonitor = new PluginThreadMonitor();
     private final Map<String, List<String>> failedEnableThreads = new HashMap<>();
+    private final Map<String, List<PluginThreadMonitor.ThreadDiagnostic>> failedEnableThreadDiagnostics = new HashMap<>();
     private int discoveredCount;
 
     public PluginRuntime(Server server, AtlasPluginManager pluginManager, CommandRegistry commands, AtlasScheduler scheduler, Logger logger, ClassLoader apiClassLoader) {
@@ -176,6 +177,9 @@ public final class PluginRuntime implements AutoCloseable {
     public List<String> failedEnableThreads(String plugin) {
         return failedEnableThreads.getOrDefault(key(plugin), List.of());
     }
+    List<PluginThreadMonitor.ThreadDiagnostic> failedEnableThreadDiagnostics(String plugin) {
+        return failedEnableThreadDiagnostics.getOrDefault(key(plugin), List.of());
+    }
     private static String key(String value) { return value.toLowerCase(Locale.ROOT); }
 
     private static void reportCompatibilityFailure(String plugin, Throwable throwable) {
@@ -195,14 +199,32 @@ public final class PluginRuntime implements AutoCloseable {
         scheduler.cancelTasks(plugin);
         commands.unregister(plugin);
         pluginManager.cleanupPluginResources(plugin);
-        List<String> liveThreads = threadMonitor.findNewLiveThreads(threadBaseline, plugin, item.classLoader());
+        List<PluginThreadMonitor.ThreadDiagnostic> diagnostics =
+            threadMonitor.findNewLiveThreads(threadBaseline, plugin, item.classLoader());
+        List<String> liveThreads = diagnostics.stream().map(PluginThreadMonitor.ThreadDiagnostic::name).toList();
+        failedEnableThreadDiagnostics.put(key(plugin.getName()), diagnostics);
         failedEnableThreads.put(key(plugin.getName()), liveThreads);
         logger.info("[AtlasHybridIntegration] FAILED_ENABLE_ROLLBACK_OK plugin=" + plugin.getName());
-        if (!liveThreads.isEmpty()) {
-            logger.warning("[AtlasHybrid Compatibility]\n"
+        if (!diagnostics.isEmpty()) {
+            StringBuilder report = new StringBuilder("[AtlasHybrid Plugin Resource]\n"
                 + "Plugin: " + plugin.getName() + "\n"
+                + "Lifecycle: FAILED_ENABLE\n"
                 + "Status: ENABLE_FAILED_WITH_LIVE_THREADS\n"
-                + "Threads: " + String.join(", ", liveThreads));
+                + "Live threads: " + diagnostics.size() + "\n"
+                + "Observed: created during enable attempt");
+            for (PluginThreadMonitor.ThreadDiagnostic diagnostic : diagnostics) {
+                report.append("\n\nThread: ").append(diagnostic.name())
+                    .append("\nDaemon: ").append(diagnostic.daemon())
+                    .append("\nState: ").append(diagnostic.state())
+                    .append("\nContext ClassLoader: ").append(diagnostic.contextClassLoader())
+                    .append("\nOwnership confidence: ").append(diagnostic.ownershipConfidence())
+                    .append("\nOwnership evidence: ").append(diagnostic.ownershipEvidence());
+                if (!diagnostic.stackTrace().isEmpty()) {
+                    report.append("\nStack:");
+                    diagnostic.stackTrace().forEach(frame -> report.append("\n  at ").append(frame));
+                }
+            }
+            logger.warning(report.toString());
         }
     }
 }

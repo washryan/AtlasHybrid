@@ -54,6 +54,12 @@ public final class AtlasPluginClassLoader extends URLClassLoader implements Java
 
     boolean isClosed() { return closed; }
 
+    boolean hasLoadedClass(String name) {
+        synchronized (getClassLoadingLock(name)) {
+            return findLoadedClass(name) != null;
+        }
+    }
+
     @Override
     public void close() throws IOException {
         super.close();

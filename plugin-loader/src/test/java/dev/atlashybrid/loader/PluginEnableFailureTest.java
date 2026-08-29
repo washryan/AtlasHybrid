@@ -90,8 +90,17 @@ class PluginEnableFailureTest {
             assertNull(commands.get("failedprobe"));
             assertSame(plugin, manager.getPlugin("FailedEnableProbe"));
             assertEquals(List.of("FailedEnableProbe-worker"), runtime.failedEnableThreads("FailedEnableProbe"));
+            PluginThreadMonitor.ThreadDiagnostic thread = runtime
+                .failedEnableThreadDiagnostics("FailedEnableProbe").get(0);
+            assertEquals("FailedEnableProbe-worker", thread.name());
+            assertTrue(thread.daemon());
+            assertEquals(PluginThreadMonitor.OwnershipConfidence.HIGH, thread.ownershipConfidence());
+            assertTrue(thread.contextClassLoader().contains("AtlasPluginClassLoader"));
+            assertTrue(thread.stackTrace().stream().anyMatch(frame -> frame.contains("FailedEnablePlugin")));
             assertTrue(logs.messages().stream().anyMatch(message -> message.contains("FAILED_ENABLE_ROLLBACK_OK")));
             assertTrue(logs.messages().stream().anyMatch(message -> message.contains("ENABLE_FAILED_WITH_LIVE_THREADS")));
+            assertTrue(logs.messages().stream().anyMatch(message -> message.contains("[AtlasHybrid Plugin Resource]")));
+            assertTrue(logs.messages().stream().anyMatch(message -> message.contains("Ownership confidence: HIGH")));
             plugin.getClass().getMethod("stopWorker").invoke(plugin);
 
             runtime.enableAll();
@@ -167,6 +176,7 @@ class PluginEnableFailureTest {
         @Override public String getForgeVersion() { return "43"; }
         @Override public String getAtlasHybridVersion() { return "test"; }
         @Override public org.bukkit.UnsafeValues getUnsafe() { return null; }
+        @Override public boolean getOnlineMode() { return true; }
         @Override public int getDetectedModCount() { return 0; }
         @Override public PluginManager getPluginManager() { return manager; }
         @Override public ServicesManager getServicesManager() { return services; }
