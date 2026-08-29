@@ -1,6 +1,7 @@
 package dev.atlashybrid.forge;
 
 import dev.atlashybrid.runtime.command.CommandRegistry;
+import dev.atlashybrid.runtime.AtlasUnsafeValues;
 import dev.atlashybrid.runtime.event.AtlasPluginManager;
 import dev.atlashybrid.runtime.scheduler.AtlasScheduler;
 import dev.atlashybrid.runtime.permission.AtlasPermissionRegistry;
@@ -16,6 +17,7 @@ import net.minecraft.world.level.Level;
 import net.minecraftforge.fml.ModList;
 import net.minecraftforge.versions.forge.ForgeVersion;
 import org.bukkit.Server;
+import org.bukkit.UnsafeValues;
 import org.bukkit.World;
 import org.bukkit.command.PluginCommand;
 import org.bukkit.command.ConsoleCommandSender;
@@ -34,6 +36,7 @@ final class ForgeServerAdapter implements Server {
     private final AtlasServicesManager services;
     private final PlayerSessionRegistry players = new PlayerSessionRegistry(player -> ((ForgePlayerAdapter) player).close());
     private final ForgeConsoleCommandSender console;
+    private final UnsafeValues unsafeValues = new AtlasUnsafeValues(AtlasUnsafeValues.MINECRAFT_1_19_2_DATA_VERSION);
 
     ForgeServerAdapter(MinecraftServer minecraftServer, AtlasPluginManager pluginManager, AtlasScheduler scheduler, CommandRegistry commands,
                        AtlasPermissionRegistry permissions, PermissionProviderRegistry providers, AtlasServicesManager services) {
@@ -56,6 +59,7 @@ final class ForgeServerAdapter implements Server {
     @Override public String getMinecraftVersion() { return minecraftServer.getServerVersion(); }
     @Override public String getForgeVersion() { return ForgeVersion.getVersion(); }
     @Override public String getAtlasHybridVersion() { return AtlasHybridMod.VERSION; }
+    @Override public UnsafeValues getUnsafe() { return unsafeValues; }
     @Override public int getDetectedModCount() { return ModList.get().size(); }
     @Override public PluginManager getPluginManager() { return pluginManager; }
     @Override public ServicesManager getServicesManager() { return services; }

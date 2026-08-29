@@ -29,6 +29,8 @@ public interface Server {
 
     String getAtlasHybridVersion();
 
+    UnsafeValues getUnsafe();
+
     int getDetectedModCount();
 
     PluginManager getPluginManager();

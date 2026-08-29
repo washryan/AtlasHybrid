@@ -60,6 +60,7 @@ class JavaPluginLifecycleTest {
         @Override public String getMinecraftVersion() { return "1.19.2"; }
         @Override public String getForgeVersion() { return "43"; }
         @Override public String getAtlasHybridVersion() { return "test"; }
+        @Override public org.bukkit.UnsafeValues getUnsafe() { return null; }
         @Override public int getDetectedModCount() { return 0; }
         @Override public PluginManager getPluginManager() { return null; }
         @Override public org.bukkit.plugin.ServicesManager getServicesManager() { return null; }

@@ -44,6 +44,13 @@ public final class AtlasHybridTestPlugin extends JavaPlugin implements Listener,
     public void onEnable() {
         saveDefaultConfig();
         reloadConfig();
+        if (org.bukkit.Bukkit.getUnsafe() == null
+            || getServer().getUnsafe() == null
+            || org.bukkit.Bukkit.getUnsafe() != getServer().getUnsafe()
+            || org.bukkit.Bukkit.getUnsafe().getDataVersion() != 3120) {
+            throw new IllegalStateException("UnsafeValues integration proof failed");
+        }
+        getLogger().info("[AtlasHybridIntegration] UNSAFE_VALUES_OK");
         FileConfiguration loadedFromFile = YamlConfiguration.loadConfiguration(new File(getDataFolder(), "config.yml"));
         if (loadedFromFile.getInt("scheduler-delay-ticks", -1) < 0
             || !loadedFromFile.isSet("cancel-block-break")) {

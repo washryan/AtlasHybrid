@@ -334,3 +334,46 @@ passed both enum probes and reached the next bytecode instruction:
 The process behavior matched raw boot #7: best-effort disable produced the same
 suppressed LuckPerms partial-initialization NPE, AtlasHybrid rollback completed,
 no plugin-owned live thread was diagnosed, and normal `stop` ended the launcher.
+
+## Phase 9.9 UnsafeValues audit
+
+The Spigot 1.19.2 contract contains fourteen `UnsafeValues` methods. The full
+classification and version-number provenance are recorded in
+[`UNSAFE_VALUES_API.md`](../architecture/UNSAFE_VALUES_API.md). Only
+`getDataVersion()` is `VERSION_METADATA` and safe for this phase. Legacy/data
+fixing, ItemStack, advancement, attribute, creative-registry and bytecode
+processing operations require CraftBukkit or Minecraft internals and remain
+explicitly unsupported or deferred.
+
+Inspection of LuckPerms' exact remapped `adventure-platform-bukkit-4.21.1` JAR
+found exactly one UnsafeValues reference. In
+`BukkitComponentSerializer.<clinit>`, the post-1.13 branch passes
+`Bukkit.getUnsafe().getDataVersion()` into
+`JSONOptions.byDataVersion().at(int)` and installs that option state on its Gson
+serializer builder. The pre-1.13 branch uses data version zero plus the legacy
+hover-event serializer. No other UnsafeValues call exists in that JAR, so
+Minecraft 1.19.2 world data version `3120` is sufficient to cross this specific
+initializer boundary.
+
+Raw boot #9 confirmed that conclusion: the static initializer completed and
+LuckPerms printed its platform enable banner. The next boundary was
+`BukkitConnectionListener.<init>:71` calling the public
+`Server#getOnlineMode(): boolean` method.
+
+| Item | Classification |
+|---|---|
+| Passed boundary | `BukkitComponentSerializer.<clinit>` -> `UnsafeValues#getDataVersion()` |
+| Returned data version | `3120`, Mojang 1.19.2 `version.json` `world_version` |
+| New symbol/path | `BukkitConnectionListener.<init>:71` -> `Server#getOnlineMode()` |
+| Use | If offline mode, combine with a CraftBukkit-version regex to activate a CraftBukkit offline-mode warning/login guard |
+| Diagnostic | `Missing API: org.bukkit.Server#getOnlineMode()`, `Status: NOT_IMPLEMENTED` |
+| Lifecycle phase | `BukkitLoaderPlugin.onEnable`, during platform-listener registration |
+| Public API? | Yes; ordinary server configuration state |
+| CraftBukkit/NMS required for the method? | No; later conditional code merely detects a CraftBukkit version string |
+| Category | **CORE_API** |
+| Phase 9.9 action | Stop and document; no cascading implementation |
+
+Rollback removed AtlasHybrid registrations, but two LuckPerms-owned metadata
+OkHttp threads created before this failure remained alive. Minecraft saved all
+dimensions after `stop`; the Gradle launcher required interruption because of
+those external threads.

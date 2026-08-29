@@ -48,6 +48,10 @@ public final class Bukkit {
         return getServer().getBukkitVersion();
     }
 
+    public static UnsafeValues getUnsafe() {
+        return getServer().getUnsafe();
+    }
+
     public static World getWorld(String name) {
         return getServer().getWorld(name);
     }

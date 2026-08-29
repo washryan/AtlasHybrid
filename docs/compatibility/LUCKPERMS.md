@@ -379,3 +379,50 @@ shutdown NPE. No attributable live thread remained. Minecraft accepted `stop`,
 saved every dimension, and the Gradle launcher exited normally. LuckPerms
 remains **BLOCKED** and unsupported because its later permission injection still
 depends on CraftBukkit implementation shape.
+
+## Phase 9.9 raw boot #9
+
+Phase 9.9 added the safe public `UnsafeValues` data-version subset. Both
+`Bukkit#getUnsafe()` and `Server#getUnsafe()` return the same immutable
+`AtlasUnsafeValues` instance. Its `getDataVersion()` result is `3120`, sourced
+from the official Minecraft 1.19.2 server `version.json` `world_version` field;
+it is not protocol version `760` or pack format `9`/`10`.
+
+The unchanged LuckPerms artifact passed
+`BukkitComponentSerializer.<clinit>`, constructed its Gson component serializer,
+printed its enable banner and advanced into platform-listener registration. The
+next first failure is:
+
+```text
+[AtlasHybrid Compatibility]
+Plugin: LuckPerms
+Missing API: org.bukkit.Server#getOnlineMode()
+Status: NOT_IMPLEMENTED
+Runtime: 0.1.0-alpha
+
+java.lang.NoSuchMethodError: 'boolean org.bukkit.Server.getOnlineMode()'
+    at me.lucko.luckperms.bukkit.listeners.BukkitConnectionListener.<init>(BukkitConnectionListener.java:71)
+    at me.lucko.luckperms.bukkit.LPBukkitPlugin.registerPlatformListeners(LPBukkitPlugin.java:135)
+    at me.lucko.luckperms.common.plugin.AbstractLuckPermsPlugin.enable(AbstractLuckPermsPlugin.java:194)
+    at me.lucko.luckperms.bukkit.LPBukkitBootstrap.onEnable(LPBukkitBootstrap.java:177)
+    at me.lucko.luckperms.bukkit.loader.BukkitLoaderPlugin.onEnable(BukkitLoaderPlugin.java:50)
+```
+
+Classification: **CORE_API**. `Server#getOnlineMode()` is ordinary public
+server-state API and can be backed by the Forge dedicated-server property; it
+does not itself require CraftBukkit or NMS. The exact LuckPerms bytecode stores
+the result, and only when it is false combines it with a regex match against a
+CraftBukkit-style server version to enable a CraftBukkit offline-mode warning
+and login guard. Per the phase stop gate it was recorded but not implemented.
+
+Best-effort disable again threw a suppressed LuckPerms partial-initialization
+`NullPointerException`, and AtlasHybrid rolled back its registrations. This
+later enable boundary had already started `OkHttp metadata.luckperms.net` and
+its writer thread; both remained alive after rollback. Minecraft accepted
+`stop` and saved all dimensions, but those two LuckPerms-owned threads kept the
+Gradle launcher alive until the test process was interrupted. This is recorded
+as raw-boot behavior, not hidden as a clean shutdown.
+
+LuckPerms remains **BLOCKED** and unsupported. No `getOnlineMode`, connection
+events, ItemStack, Registry, CraftBukkit, NMS, Mixin or LuckPerms-specific code
+was added after the blocker.
