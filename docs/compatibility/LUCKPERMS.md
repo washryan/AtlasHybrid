@@ -471,3 +471,48 @@ ownership result from thread names alone.
 LuckPerms remains **BLOCKED** overall because its known later permission
 injection relies on CraftBukkit implementation shape. The raw boot result is
 not a support claim.
+
+## Phase 9.11 raw boot #11
+
+Phase 9.11 implements the exact public `AsyncPlayerPreLoginEvent` result and
+data contract and dispatches it during Forge negotiation on a real worker
+thread. A controlled protocol-760 proof verified deterministic offline UUID,
+real loopback address, allow-after-disallow, rejection before session creation,
+successful allow/join/quit, and clean session removal. `ASYNC_PRELOGIN_OK` and
+`PRELOGIN_DENY_OK` each appeared once. The full suite passed `93/93`; the
+integration proof, WelcomeMessage and WarpPlugin regressions passed; and both
+clean builds produced identical runtime, test-plugin, and test-mod JARs.
+
+The unchanged LuckPerms artifact crossed the former reflection boundary,
+completed construction of `BukkitConnectionListener`, printed its enable
+banner, and began registering that listener. Reflection then reached the next
+declared handler type:
+
+```text
+[AtlasHybrid Compatibility]
+Plugin: LuckPerms
+Missing API: org.bukkit.event.player.PlayerLoginEvent
+Status: NOT_IMPLEMENTED
+Runtime: 0.1.0-alpha
+
+java.lang.NoClassDefFoundError: org/bukkit/event/player/PlayerLoginEvent
+    at java.lang.Class.getDeclaredMethods0(Native Method)
+    at dev.atlashybrid.runtime.event.AtlasPluginManager.registerEvents(AtlasPluginManager.java:57)
+    at me.lucko.luckperms.bukkit.LPBukkitPlugin.registerPlatformListeners(LPBukkitPlugin.java:136)
+    at me.lucko.luckperms.common.plugin.AbstractLuckPermsPlugin.enable(AbstractLuckPermsPlugin.java:194)
+```
+
+Classification: **CORE_API**. LuckPerms declares synchronous `PlayerLoginEvent`
+handlers at `LOWEST` and `MONITOR`; they validate loaded state, inject/check its
+permissible, update context, and can disallow login. This is a separate player
+creation/login stage and was not implemented after the stop gate.
+
+Best-effort disable again recorded the known suppressed
+`extensionManager.close()` partial-state null dereference, after which
+AtlasHybrid completed rollback with zero permission providers and services.
+Before stop, a JVM thread dump showed nine daemon threads named
+`luckperms-worker-0` through `luckperms-worker-8`, all parked in the same
+ForkJoinPool; the explicit names and stacks give high ownership confidence,
+but daemon state means they did not prevent exit. Normal `stop` saved all
+dimensions, Gradle exited `0` with `BUILD SUCCESSFUL`, and no Forge server Java
+process remained. LuckPerms remains **BLOCKED** and unsupported.

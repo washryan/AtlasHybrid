@@ -3,6 +3,7 @@ package dev.atlashybrid.testplugin;
 import dev.atlashybrid.runtime.permission.AtlasPermissions;
 import dev.atlashybrid.runtime.permission.PermissionProviderPriority;
 import java.io.File;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
@@ -19,6 +20,7 @@ import org.bukkit.event.Event;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.HandlerList;
 import org.bukkit.event.block.BlockBreakEvent;
+import org.bukkit.event.player.AsyncPlayerPreLoginEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -146,6 +148,25 @@ public final class AtlasHybridTestPlugin extends JavaPlugin implements Listener,
             event.getPlayer().getDisplayName();
         } catch (UnsupportedOperationException expected) {
             getLogger().info("[AtlasHybridTestPlugin] unsupported API diagnostic observed");
+        }
+    }
+
+    @EventHandler(priority = EventPriority.LOW)
+    public void onAsyncPreLogin(AsyncPlayerPreLoginEvent event) {
+        if (!event.getName().equals("AtlasDenied") && !event.getName().equals("AtlasAllowed")) return;
+        java.util.UUID expected = java.util.UUID.nameUUIDFromBytes(
+            ("OfflinePlayer:" + event.getName()).getBytes(StandardCharsets.UTF_8));
+        if (!event.isAsynchronous()
+            || Thread.currentThread().getName().equals("Server thread")
+            || !event.getAddress().isLoopbackAddress()
+            || !expected.equals(event.getUniqueId())) {
+            throw new IllegalStateException("Async pre-login connection data/thread contract mismatch");
+        }
+        if (event.getName().equals("AtlasDenied")) {
+            event.disallow(AsyncPlayerPreLoginEvent.Result.KICK_OTHER, "AtlasHybrid integration deny");
+        } else {
+            event.disallow(AsyncPlayerPreLoginEvent.Result.KICK_OTHER, "temporary");
+            event.allow();
         }
     }
 

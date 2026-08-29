@@ -1,7 +1,17 @@
 package dev.atlashybrid.testmod;
 
 import com.mojang.logging.LogUtils;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.EOFException;
+import java.io.IOException;
+import java.net.InetAddress;
+import java.net.Socket;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 import io.netty.channel.embedded.EmbeddedChannel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.Connection;
@@ -27,6 +37,7 @@ public final class AtlasHybridTestMod {
     private MinecraftServer server;
     private int ticks;
     private boolean probeRan;
+    private CompletableFuture<LoginProofResult> loginProof;
 
     public AtlasHybridTestMod() {
         MinecraftForge.EVENT_BUS.register(this);
@@ -44,17 +55,186 @@ public final class AtlasHybridTestMod {
     public void onServerTick(TickEvent.ServerTickEvent event) {
         if (server == null || event.phase != TickEvent.Phase.END) return;
         ticks++;
-        if (!probeRan && ticks >= 5) {
+        if (ticks == 1) {
+            loginProof = CompletableFuture.supplyAsync(this::runRealLoginProof);
+        }
+        if (!probeRan && ticks >= 5 && loginProof != null && loginProof.isDone()) {
             probeRan = true;
+            LoginProofResult login = loginProof.join();
+            if (!login.denied() || !login.allowed() || !login.joinObserved() || !login.quitCleanupObserved()) {
+                throw new IllegalStateException("Real login proof failed: " + login);
+            }
+            LOGGER.info("[AtlasHybridIntegration] ASYNC_PRELOGIN_OK");
+            LOGGER.info("[AtlasHybridIntegration] PRELOGIN_DENY_OK");
             runProbe();
         }
-        if (ticks >= 60) {
+        if (ticks >= 300 && !probeRan) {
+            throw new IllegalStateException("Real login proof did not complete");
+        }
+        if (probeRan && ticks >= 60) {
             LOGGER.info("[AtlasHybridIntegration] SHUTDOWN_REQUESTED");
             MinecraftServer current = server;
             server = null;
             current.halt(false);
         }
     }
+
+    private LoginProofResult runRealLoginProof() {
+        try {
+            LoginResponse denied = loginDenied("AtlasDenied");
+            boolean deniedSessionAbsent = remainsPlayerAbsent("AtlasDenied", 2_000L);
+            LoginResponse allowed = loginAndHold("AtlasAllowed");
+            return new LoginProofResult(
+                denied.packetId() == 0
+                    && (denied.payload().contains("AtlasHybrid integration deny")
+                        || denied.payload().equals("connection-closed-after-deny"))
+                    && deniedSessionAbsent,
+                allowed.packetId() == 2,
+                allowed.joinObserved(),
+                allowed.quitCleanupObserved()
+            );
+        } catch (IOException exception) {
+            throw new IllegalStateException("Real Minecraft login probe failed", exception);
+        }
+    }
+
+    private LoginResponse loginDenied(String name) throws IOException {
+        try {
+            return login(name);
+        } catch (EOFException expectedTransportClose) {
+            return new LoginResponse(0, "connection-closed-after-deny", false, false);
+        }
+    }
+
+    private LoginResponse login(String name) throws IOException {
+        try (Socket socket = openLoginSocket(name)) {
+            return readLoginResponse(socket);
+        }
+    }
+
+    private LoginResponse loginAndHold(String name) throws IOException {
+        Socket socket = openLoginSocket(name);
+        try {
+            LoginResponse response = readLoginResponse(socket);
+            boolean joined = response.packetId() == 2 && waitForPlayer(name, true, 5_000L);
+            socket.close();
+            boolean quit = waitForPlayer(name, false, 5_000L);
+            return new LoginResponse(response.packetId(), response.payload(), joined, quit);
+        } finally {
+            if (!socket.isClosed()) socket.close();
+        }
+    }
+
+    private Socket openLoginSocket(String name) throws IOException {
+        Socket socket = new Socket(InetAddress.getLoopbackAddress(), server.getPort());
+        socket.setSoTimeout(10_000);
+        DataOutputStream output = new DataOutputStream(socket.getOutputStream());
+
+        ByteArrayOutputStream handshakeBytes = new ByteArrayOutputStream();
+        DataOutputStream handshake = new DataOutputStream(handshakeBytes);
+        writeVarInt(handshake, 0);
+        writeVarInt(handshake, 760);
+        writeString(handshake, "localhost");
+        handshake.writeShort(server.getPort());
+        writeVarInt(handshake, 2);
+        writePacket(output, handshakeBytes.toByteArray());
+
+        ByteArrayOutputStream loginBytes = new ByteArrayOutputStream();
+        DataOutputStream login = new DataOutputStream(loginBytes);
+        writeVarInt(login, 0);
+        writeString(login, name);
+        login.writeBoolean(false);
+        login.writeBoolean(false);
+        writePacket(output, loginBytes.toByteArray());
+        output.flush();
+        return socket;
+    }
+
+    private LoginResponse readLoginResponse(Socket socket) throws IOException {
+        DataInputStream input = new DataInputStream(socket.getInputStream());
+        for (int attempt = 0; attempt < 8; attempt++) {
+            int frameLength = readVarInt(input);
+            byte[] frame = input.readNBytes(frameLength);
+            if (frame.length != frameLength) throw new EOFException("Incomplete login frame");
+            DataInputStream packet = new DataInputStream(new ByteArrayInputStream(frame));
+            int packetId = readVarInt(packet);
+            if (packetId == 0) return new LoginResponse(packetId, readString(packet), false, false);
+            if (packetId == 2) return new LoginResponse(packetId, "login-success", false, false);
+            if (packetId == 1) throw new IOException("Server requested online-mode encryption during offline integration proof");
+            if (packetId == 3) throw new IOException("Unexpected compression packet during uncompressed integration proof");
+        }
+        throw new IOException("No terminal login response received");
+    }
+
+    private boolean waitForPlayer(String name, boolean present, long timeoutMillis) {
+        long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(timeoutMillis);
+        while (System.nanoTime() < deadline) {
+            boolean found = org.bukkit.Bukkit.getServer().getPlayerExact(name) != null;
+            if (found == present) return true;
+            try {
+                Thread.sleep(10L);
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException("Login proof interrupted", exception);
+            }
+        }
+        return false;
+    }
+
+    private boolean remainsPlayerAbsent(String name, long durationMillis) {
+        long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(durationMillis);
+        while (System.nanoTime() < deadline) {
+            if (org.bukkit.Bukkit.getServer().getPlayerExact(name) != null) return false;
+            try {
+                Thread.sleep(10L);
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException("Login proof interrupted", exception);
+            }
+        }
+        return true;
+    }
+
+    private static void writePacket(DataOutputStream output, byte[] packet) throws IOException {
+        writeVarInt(output, packet.length);
+        output.write(packet);
+    }
+
+    private static void writeString(DataOutputStream output, String value) throws IOException {
+        byte[] bytes = value.getBytes(StandardCharsets.UTF_8);
+        writeVarInt(output, bytes.length);
+        output.write(bytes);
+    }
+
+    private static String readString(DataInputStream input) throws IOException {
+        int length = readVarInt(input);
+        byte[] bytes = input.readNBytes(length);
+        if (bytes.length != length) throw new EOFException("Incomplete string");
+        return new String(bytes, StandardCharsets.UTF_8);
+    }
+
+    private static void writeVarInt(DataOutputStream output, int value) throws IOException {
+        do {
+            int next = value & 0x7F;
+            value >>>= 7;
+            if (value != 0) next |= 0x80;
+            output.writeByte(next);
+        } while (value != 0);
+    }
+
+    private static int readVarInt(DataInputStream input) throws IOException {
+        int result = 0;
+        for (int shift = 0; shift < 35; shift += 7) {
+            int next = input.readUnsignedByte();
+            result |= (next & 0x7F) << shift;
+            if ((next & 0x80) == 0) return result;
+        }
+        throw new IOException("VarInt exceeds five bytes");
+    }
+
+    private record LoginResponse(int packetId, String payload, boolean joinObserved, boolean quitCleanupObserved) { }
+
+    private record LoginProofResult(boolean denied, boolean allowed, boolean joinObserved, boolean quitCleanupObserved) { }
 
     private void runProbe() {
         LOGGER.info("[AtlasHybridIntegration] PROBE_START");

@@ -421,3 +421,46 @@ with the enhanced monitor, but neither thread survived the failure snapshot;
 therefore no ownership confidence was assigned, and normal shutdown exited the
 launcher. The generic diagnostic remains covered by a controlled failed-enable
 fixture with `HIGH` context-classloader evidence.
+
+## Phase 9.11 connection listener audit and raw boot
+
+The exact LuckPerms 5.5.81 `BukkitConnectionListener` bytecode declares five
+connection handlers. `onPlayerPreLogin` uses
+`AsyncPlayerPreLoginEvent` at `LOW` to load user data and disallow database
+failures; `onPlayerPreLoginMonitor` uses `MONITOR` to reject a later re-allow.
+`onPlayerLogin` uses `PlayerLoginEvent` at `LOWEST` to validate loaded user
+state, construct/inject `LuckPermsPermissible`, signal context, and disallow
+failure states. `onPlayerLoginMonitor` uses `MONITOR` to reject a later re-allow
+and verify injection. `onPlayerQuit` uses `PlayerQuitEvent` at `MONITOR` to
+disconnect data and schedule uninjection. No handler explicitly sets
+`ignoreCancelled`, and this listener does not use deprecated
+`PlayerPreLoginEvent`.
+
+AtlasHybrid now dispatches `AsyncPlayerPreLoginEvent` through its existing
+event executor during Forge `PlayerNegotiationEvent` queued work. The event is
+truly asynchronous; authenticated UUIDs are preserved, offline UUIDs use
+Minecraft's deterministic algorithm, and the address is the real transport
+peer. Proxy forwarding is not claimed. A denial closes the connection before
+player construction and therefore cannot create a join event or AtlasHybrid
+player state. Full semantics and pipeline ordering are documented in
+[`CONNECTION_EVENT_API.md`](../architecture/CONNECTION_EVENT_API.md).
+
+Raw boot #11 confirms that reflection resolves both async pre-login handlers.
+The first following missing symbol is:
+
+| Item | Classification |
+|---|---|
+| Passed boundary | `Class#getDeclaredMethods` resolves `AsyncPlayerPreLoginEvent` handlers |
+| New symbol/path | `LPBukkitPlugin.registerPlatformListeners:136` -> `PluginManager#registerEvents` -> `Class#getDeclaredMethods` -> `org.bukkit.event.player.PlayerLoginEvent` |
+| Diagnostic | `Missing API: org.bukkit.event.player.PlayerLoginEvent`, `Status: NOT_IMPLEMENTED` |
+| Lifecycle phase | `BukkitLoaderPlugin.onEnable`, during `BukkitConnectionListener` registration after the LuckPerms enable banner |
+| Public API? | Yes; synchronous, cancellable Bukkit login-stage event |
+| CraftBukkit/NMS required for the type itself? | No; LuckPerms' handler subsequently performs its known CraftBukkit-shaped permissible injection |
+| Category | **CORE_API** |
+| Phase 9.11 action | Stop and document; defer `PlayerLoginEvent` and do not cascade |
+
+The failed-enable dump found nine `luckperms-worker-*` daemon threads parked in
+one ForkJoinPool, with high name/stack ownership confidence. AtlasHybrid's
+rollback left zero permission providers and services. Normal `stop` saved the
+three dimensions, the launcher exited successfully, and no server Java process
+remained; no thread was killed or otherwise manipulated.

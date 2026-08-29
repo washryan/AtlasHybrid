@@ -16,17 +16,22 @@ import dev.atlashybrid.runtime.permission.AtlasPermissions;
 import dev.atlashybrid.runtime.permission.PermissionProviderRegistry;
 import dev.atlashybrid.runtime.service.AtlasServicesManager;
 import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.net.SocketAddress;
 import java.nio.file.Path;
 import java.util.concurrent.CompletableFuture;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
+import net.minecraft.core.UUIDUtil;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.entity.player.PlayerEvent;
+import net.minecraftforge.event.entity.player.PlayerNegotiationEvent;
 import net.minecraftforge.event.level.BlockEvent;
 import net.minecraftforge.event.server.ServerAboutToStartEvent;
 import net.minecraftforge.event.server.ServerStartedEvent;
@@ -38,6 +43,7 @@ import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import org.bukkit.Bukkit;
 import org.bukkit.event.block.BlockBreakEvent;
+import org.bukkit.event.player.AsyncPlayerPreLoginEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 
@@ -205,6 +211,32 @@ public final class AtlasHybridMod {
     @SubscribeEvent
     public void onServerTick(TickEvent.ServerTickEvent event) {
         if (event.phase == TickEvent.Phase.END && scheduler != null) scheduler.tick();
+    }
+
+    @SubscribeEvent
+    public void onPlayerNegotiation(PlayerNegotiationEvent event) {
+        if (pluginManager == null) return;
+        SocketAddress remote = event.getConnection().getRemoteAddress();
+        if (!(remote instanceof InetSocketAddress socketAddress) || socketAddress.getAddress() == null) {
+            LOGGER.warning("[AtlasHybrid Connection] AsyncPlayerPreLoginEvent skipped: remote InetAddress unavailable");
+            return;
+        }
+        String name = event.getProfile().getName();
+        java.util.UUID uniqueId = event.getProfile().getId() != null
+            ? event.getProfile().getId()
+            : UUIDUtil.createOfflinePlayerUUID(name);
+        event.enqueueWork(() -> {
+            AsyncPlayerPreLoginEvent bridged =
+                new AsyncPlayerPreLoginEvent(name, socketAddress.getAddress(), uniqueId);
+            pluginManager.callEvent(bridged);
+            if (bridged.getLoginResult() != AsyncPlayerPreLoginEvent.Result.ALLOWED) {
+                LOGGER.info("[AtlasHybrid Connection] Async pre-login denied name=" + name
+                    + " result=" + bridged.getLoginResult()
+                    + " reason=" + java.util.Objects.toString(bridged.getKickMessage(), ""));
+                event.getConnection().disconnect(Component.literal(
+                    java.util.Objects.toString(bridged.getKickMessage(), "")));
+            }
+        });
     }
 
     @SubscribeEvent

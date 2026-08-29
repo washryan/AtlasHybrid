@@ -17,6 +17,7 @@ debug/
 eula.txt
 server.properties
 !platform-forge-1.19.2/manual/server.properties
+!platform-forge-1.19.2/integration/server.properties
 usercache.json
 usernamecache.json
 ops.json

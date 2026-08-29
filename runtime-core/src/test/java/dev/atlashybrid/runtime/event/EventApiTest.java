@@ -9,9 +9,11 @@ import dev.atlashybrid.runtime.permission.AtlasPermissionRegistry;
 import dev.atlashybrid.runtime.permission.PermissionProviderRegistry;
 import dev.atlashybrid.runtime.service.AtlasServicesManager;
 import java.io.File;
+import java.net.InetAddress;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Handler;
 import java.util.logging.LogRecord;
@@ -27,6 +29,7 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.HandlerList;
 import org.bukkit.event.Listener;
+import org.bukkit.event.player.AsyncPlayerPreLoginEvent;
 import org.bukkit.permissions.Permission;
 import org.bukkit.permissions.PermissionAttachment;
 import org.bukkit.permissions.PermissionAttachmentInfo;
@@ -154,6 +157,23 @@ class EventApiTest {
             (registered, event) -> calls.incrementAndGet(), plugin);
         manager.callEvent(new TestEvent());
         assertEquals(1, calls.get());
+    }
+
+    @Test
+    void asyncPreLoginUsesPriorityOrderAndContinuesAfterListenerFailure() {
+        List<String> order = new ArrayList<>();
+        manager.registerEvent(AsyncPlayerPreLoginEvent.class, new Listener() { }, EventPriority.LOW,
+            (registered, event) -> order.add("low"), plugin);
+        manager.registerEvent(AsyncPlayerPreLoginEvent.class, new NamedListener(), EventPriority.NORMAL,
+            (registered, event) -> { throw new EventException(new IllegalStateException("prelogin boom")); }, plugin);
+        manager.registerEvent(AsyncPlayerPreLoginEvent.class, new Listener() { }, EventPriority.MONITOR,
+            (registered, event) -> order.add("monitor"), plugin);
+        manager.callEvent(new AsyncPlayerPreLoginEvent("AtlasPlayer", InetAddress.getLoopbackAddress(),
+            UUID.fromString("9f1e5b65-1e8e-3b20-a38d-fb6d51b71a70")));
+        assertEquals(List.of("low", "monitor"), order);
+        assertTrue(logs.records.stream().anyMatch(record ->
+            record.getMessage().contains("Event: AsyncPlayerPreLoginEvent")
+                && record.getMessage().contains("Status: EXECUTION_FAILED")));
     }
 
     private void register(List<String> order, String value, EventPriority priority) {

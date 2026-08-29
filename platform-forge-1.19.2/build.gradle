@@ -57,6 +57,7 @@ def manualRunDirectory = rootProject.file('run-manual')
 def compatibilityRunDirectory = rootProject.file('run-compat')
 def integrationRunDirectory = rootProject.file('run')
 def manualServerProperties = project.file('manual/server.properties')
+def integrationServerProperties = project.file('integration/server.properties')
 
 tasks.register('prepareIntegrationServer') {
     group = 'atlashybrid'
@@ -65,6 +66,7 @@ tasks.register('prepareIntegrationServer') {
 
     inputs.file(project(':test-plugin').tasks.named('jar').flatMap { it.archiveFile })
     inputs.file(project(':test-plugin').tasks.named('failedEnableJar').flatMap { it.archiveFile })
+    inputs.file(integrationServerProperties)
     outputs.files(
         new File(integrationRunDirectory, 'plugins/AtlasHybridTestPlugin.jar'),
         new File(integrationRunDirectory, 'plugins/AtlasHybridFailedEnableTestPlugin.jar')
@@ -72,6 +74,10 @@ tasks.register('prepareIntegrationServer') {
 
     doLast {
         new File(integrationRunDirectory, 'plugins').mkdirs()
+        copy {
+            from integrationServerProperties
+            into integrationRunDirectory
+        }
         copy {
             from project(':test-plugin').tasks.named('jar').flatMap { it.archiveFile }
             into new File(integrationRunDirectory, 'plugins')
