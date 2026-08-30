@@ -99,6 +99,10 @@ final class ForgeServerAdapter implements Server {
         return promoted == null ? player(player) : (ForgePlayerAdapter) promoted;
     }
 
+    ForgePlayerAdapter onlinePlayer(net.minecraft.server.level.ServerPlayer player) {
+        return (ForgePlayerAdapter) players.getPlayer(player.getUUID());
+    }
+
     void disconnect(net.minecraft.server.level.ServerPlayer player) {
         players.remove(player.getUUID());
     }
@@ -119,6 +123,11 @@ final class ForgeServerAdapter implements Server {
 
     synchronized ForgeWorldAdapter world(ServerLevel level) {
         return worlds.computeIfAbsent(level, current -> new ForgeWorldAdapter(current, worldName(current)));
+    }
+
+    ForgeWorldAdapter world(net.minecraft.resources.ResourceKey<Level> dimension) {
+        ServerLevel level = minecraftServer.getLevel(dimension);
+        return level == null ? null : world(level);
     }
 
     int permissionProviderCount() { return providers.size(); }

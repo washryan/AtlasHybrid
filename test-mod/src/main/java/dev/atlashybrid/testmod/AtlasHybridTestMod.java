@@ -385,6 +385,22 @@ public final class AtlasHybridTestMod {
         LOGGER.info("[AtlasHybridIntegration] GAMEMODE_API_OK");
         assertWorldEnvironment(onlinePlayer);
         LOGGER.info("[AtlasHybridIntegration] WORLD_ENVIRONMENT_OK");
+        ServerLevel nether = server.getLevel(net.minecraft.world.level.Level.NETHER);
+        if (nether == null) throw new IllegalStateException("Nether level is unavailable");
+        org.bukkit.World fromWorld = onlinePlayer.getWorld();
+        org.bukkit.entity.Player playerIdentity = onlinePlayer;
+        player.teleportTo(nether, 0.5D, 80.0D, 0.5D, player.getYRot(), player.getXRot());
+        if (onlinePlayer != playerIdentity
+            || onlinePlayer != bukkitServer.getPlayer(player.getUUID())
+            || onlinePlayer.getWorld() == fromWorld
+            || onlinePlayer.getWorld().getEnvironment() != org.bukkit.World.Environment.NETHER
+            || onlinePlayer.getLocation().getWorld() != onlinePlayer.getWorld()) {
+            throw new IllegalStateException("Real dimension transition did not preserve Bukkit player context");
+        }
+        int worldProof = server.getCommands().performPrefixedCommand(
+            player.createCommandSourceStack(), "atlas world-transition-proof");
+        if (worldProof != 1) throw new IllegalStateException("PlayerChangedWorldEvent proof command failed");
+        LOGGER.info("[AtlasHybridIntegration] PLAYER_CHANGED_WORLD_OK");
         int playerMutation = server.getCommands().performPrefixedCommand(
             player.createCommandSourceStack(), "atlas player-original");
         server.getCommands().performPrefixedCommand(
@@ -393,9 +409,11 @@ public final class AtlasHybridTestMod {
         LOGGER.info("[AtlasHybridIntegration] PLAYER_COMMAND_PREPROCESS_OK");
         LOGGER.info("[AtlasHybridIntegration] PLAYER_COMMAND_PREPROCESS_CANCEL_OK");
         runExternalRegressionIfPresent(player);
-        level.setBlockAndUpdate(position, Blocks.STONE.defaultBlockState());
-        boolean destroyed = player.gameMode.destroyBlock(position);
-        boolean blockStillPresent = level.getBlockState(position).is(Blocks.STONE);
+        ServerLevel activeLevel = player.getLevel();
+        BlockPos activePosition = player.blockPosition().below();
+        activeLevel.setBlockAndUpdate(activePosition, Blocks.STONE.defaultBlockState());
+        boolean destroyed = player.gameMode.destroyBlock(activePosition);
+        boolean blockStillPresent = activeLevel.getBlockState(activePosition).is(Blocks.STONE);
         LOGGER.info("[AtlasHybridIntegration] BLOCK_BREAK_RESULT destroyed={} blockStillPresent={}", destroyed, blockStillPresent);
         MinecraftForge.EVENT_BUS.post(new PlayerEvent.PlayerLoggedOutEvent(player));
         if (!bukkitServer.getOnlinePlayers().isEmpty()

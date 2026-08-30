@@ -839,3 +839,50 @@ The suite passed `118/118`; integration, WelcomeMessage and WarpPlugin passed;
 `WORLD_ENVIRONMENT_OK` appeared exactly once; and two clean builds produced
 byte-identical runtime, test-plugin and test-mod JARs. LuckPerms remains
 **BLOCKED** and unsupported.
+
+## Phase 9.19 raw boot #19
+
+Phase 9.19 adds the exact synchronous, non-cancellable Bukkit 1.19.2
+`PlayerChangedWorldEvent` and bridges Forge's public post-transition
+`PlayerChangedDimensionEvent`. A controlled real Overworld-to-Nether transfer
+proved the previous world, destination-visible player context, stable adapter,
+permission attachment and one-only dispatch. Same-world WarpPlugin teleport did
+not produce a false transition. See
+[`PLAYER_CHANGED_WORLD_EVENT_API.md`](../architecture/PLAYER_CHANGED_WORLD_EVENT_API.md).
+
+The unchanged official LuckPerms artifact crossed the former listener symbol
+and stopped at the next declared method of the same calculator:
+
+```text
+[AtlasHybrid Compatibility]
+Plugin: LuckPerms
+Missing API: org.bukkit.event.player.PlayerGameModeChangeEvent
+Status: NOT_IMPLEMENTED
+Runtime: 0.1.0-alpha
+
+java.lang.NoClassDefFoundError: org/bukkit/event/player/PlayerGameModeChangeEvent
+    at java.lang.Class.getDeclaredMethods0(Native Method)
+    at dev.atlashybrid.runtime.event.AtlasPluginManager.registerEvents(AtlasPluginManager.java:57)
+    at me.lucko.luckperms.bukkit.LPBukkitPlugin.setupContextManager(LPBukkitPlugin.java:190)
+```
+
+This is the next **CORE_API** context invalidation boundary. The calculator's
+world-change handler conditionally calls
+`BukkitContextManager#signalContextUpdate(event.getPlayer())` when world or
+dimension-type contexts are enabled; recalculation then reads the already
+consistent `Player#getGameMode()`, `Player#getWorld()`, environment and world
+name. No additional API was implemented in cascade.
+
+Command registration remained complete and H2/storage initialized. Overall
+`setupContextManager` and LuckPerms `onEnable` remain incomplete, so
+`LUCKPERMS_ENABLE_REACHED` was not recorded and functional LuckPerms testing did
+not begin. The pre-stop dump contained eight daemon `luckperms-worker-*`
+threads, four OkHttp threads, one daemon Okio watchdog and one daemon MVStore
+writer. Minecraft `stop` saved all dimensions. The post-stop dump retained the
+same counts and no Server thread; the non-daemon OkHttp metadata writer kept the
+JVM alive, so the launcher was interrupted only after server shutdown. No
+Forge server process remained.
+
+Final regression was `120/120`; integration, WelcomeMessage and WarpPlugin
+passed; `PLAYER_CHANGED_WORLD_OK` appeared exactly once; and clean builds A/B
+produced byte-identical runtime, test-plugin and test-mod JARs.

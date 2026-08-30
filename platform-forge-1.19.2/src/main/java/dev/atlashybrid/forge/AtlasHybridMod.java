@@ -46,6 +46,7 @@ import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.player.AsyncPlayerPreLoginEvent;
 import org.bukkit.event.player.PlayerLoginEvent;
 import org.bukkit.event.player.PlayerCommandPreprocessEvent;
+import org.bukkit.event.player.PlayerChangedWorldEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.server.RemoteServerCommandEvent;
@@ -337,6 +338,28 @@ public final class AtlasHybridMod {
                 serverAdapter.disconnect(player);
             }
         }
+    }
+
+    @SubscribeEvent
+    public void onPlayerChangedDimension(PlayerEvent.PlayerChangedDimensionEvent event) {
+        if (pluginManager == null || serverAdapter == null
+            || !(event.getEntity() instanceof ServerPlayer player)
+            || event.getFrom().equals(event.getTo())) return;
+        if (!player.server.isSameThread()) {
+            throw new IllegalStateException("PlayerChangedWorldEvent must execute on the Server thread");
+        }
+        ForgePlayerAdapter adapter = serverAdapter.onlinePlayer(player);
+        ForgeWorldAdapter from = serverAdapter.world(event.getFrom());
+        ForgeWorldAdapter destination = serverAdapter.world(event.getTo());
+        if (adapter == null || from == null || destination == null) {
+            LOGGER.warning("[AtlasHybrid World] PlayerChangedWorldEvent skipped: session or world adapter unavailable"
+                + " from=" + event.getFrom().location() + " to=" + event.getTo().location());
+            return;
+        }
+        if (adapter.getWorld() != destination) {
+            throw new IllegalStateException("Player world adapter did not reflect destination before dispatch");
+        }
+        pluginManager.callEvent(new PlayerChangedWorldEvent(adapter, from));
     }
 
     @SubscribeEvent(priority = EventPriority.LOWEST)

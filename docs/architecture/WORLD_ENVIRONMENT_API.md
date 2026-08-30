@@ -51,7 +51,7 @@ The complete context path at raw boot #18 is:
 | Supported | `World.Environment`, `Environment.values()`, `World#getEnvironment()` |
 | Supported | `PlayerJoinEvent` invalidation |
 | Missing | `Server#getWorlds()` for potential world contexts |
-| Missing | `PlayerChangedWorldEvent` for world/dimension invalidation |
+| Supported | `PlayerChangedWorldEvent` for real Forge dimension-change invalidation |
 | Missing | `PlayerGameModeChangeEvent` for game-mode invalidation |
 | Deferred/unused | `World#getUID()`, Location, locale, address, client data, inventory, metadata and persistent data |
 
@@ -59,8 +59,9 @@ For a calculated subject, LuckPerms emits lower-case game mode, rewritten world
 name and a dimension-type value. Vanilla dimension names are `overworld`,
 `the_nether` and `the_end`; `CUSTOM` falls back to `custom`. Potential-context
 estimation additionally enumerates `Server#getWorlds()`. Listener registration
-will also reflect both missing change-event types. Raw boot #18 determines
-which of those symbols is linked first; none is implemented in cascade here.
+also reflects the still-missing game-mode change event. Raw boot #19 confirms
+that world-change listener linkage now passes and stops at
+`PlayerGameModeChangeEvent`.
 
 ## Proof scope
 
@@ -68,6 +69,6 @@ Unit tests verify enum order, all legacy IDs, invalid lookup, all three vanilla
 dimension keys, a modded key mapping to `CUSTOM`, and null rejection. The Forge
 integration proof verifies real Overworld, Nether and End adapters, repeated
 adapter identity, and player/entity/location world coherence, then emits
-`WORLD_ENVIRONMENT_OK` exactly once. It deliberately does not teleport the
-synthetic integration player between dimensions because that would add a
-fragile portal/connection test unrelated to this API boundary.
+`WORLD_ENVIRONMENT_OK` exactly once. Phase 9.19 extends the same harness with a
+controlled real Overworld-to-Nether transfer; see
+[`PLAYER_CHANGED_WORLD_EVENT_API.md`](PLAYER_CHANGED_WORLD_EVENT_API.md).

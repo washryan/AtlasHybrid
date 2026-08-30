@@ -24,6 +24,7 @@ import org.bukkit.event.player.AsyncPlayerPreLoginEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerLoginEvent;
 import org.bukkit.event.player.PlayerCommandPreprocessEvent;
+import org.bukkit.event.player.PlayerChangedWorldEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.server.RemoteServerCommandEvent;
 import org.bukkit.event.server.ServerCommandEvent;
@@ -38,6 +39,8 @@ import org.bukkit.plugin.ServicePriority;
 public final class AtlasHybridTestPlugin extends JavaPlugin implements Listener, CommandExecutor {
     private final java.util.logging.Logger earlyLogger = getLogger();
     private org.bukkit.entity.Player sessionPlayer;
+    private PermissionAttachment sessionAttachment;
+    private final java.util.concurrent.atomic.AtomicInteger changedWorldEvents = new java.util.concurrent.atomic.AtomicInteger();
     private final java.util.concurrent.ConcurrentMap<String, java.util.List<String>> loginOrder =
         new java.util.concurrent.ConcurrentHashMap<>();
     private final java.util.concurrent.atomic.AtomicInteger localServerCommands = new java.util.concurrent.atomic.AtomicInteger();
@@ -160,6 +163,15 @@ public final class AtlasHybridTestPlugin extends JavaPlugin implements Listener,
         if (args.length == 1 && "player-cancelled".equals(args[0])) {
             throw new IllegalStateException("Cancelled player command executed");
         }
+        if (args.length == 1 && "world-transition-proof".equals(args[0])) {
+            if (sender != sessionPlayer || changedWorldEvents.get() != 1
+                || sender instanceof org.bukkit.entity.Player player
+                    && (player.getWorld().getEnvironment() != org.bukkit.World.Environment.NETHER
+                        || !player.hasPermission("atlas.test.world-transition"))) {
+                throw new IllegalStateException("PlayerChangedWorldEvent integration state mismatch");
+            }
+            return true;
+        }
         sender.sendMessage("Usage: /atlas [info|permission <node>]; got " + Arrays.toString(args));
         return false;
     }
@@ -179,6 +191,7 @@ public final class AtlasHybridTestPlugin extends JavaPlugin implements Listener,
             requireLoginOrder("AtlasAllowed", java.util.List.of("AsyncPreLogin", "PlayerLogin", "PlayerJoin"));
         }
         sessionPlayer = event.getPlayer();
+        sessionAttachment = event.getPlayer().addAttachment(this, "atlas.test.world-transition", true);
         getLogger().info("[AtlasHybridTestPlugin] PlayerJoinEvent: " + event.getPlayer().getName());
         PermissionAttachment attachment = event.getPlayer().addAttachment(this, "atlas.test.attachment", true);
         boolean attachmentTrue = event.getPlayer().hasPermission("ATLAS.TEST.ATTACHMENT");
@@ -261,7 +274,30 @@ public final class AtlasHybridTestPlugin extends JavaPlugin implements Listener,
     public void onQuit(PlayerQuitEvent event) {
         getLogger().info("[AtlasHybridPermissionProof] quitIdentityStable=" + (event.getPlayer() == sessionPlayer));
         getLogger().info("[AtlasHybridTestPlugin] PlayerQuitEvent: " + event.getPlayer().getName());
-        sessionPlayer = null;
+        if (event.getPlayer() == sessionPlayer && sessionAttachment != null) {
+            sessionAttachment.remove();
+            sessionAttachment = null;
+            sessionPlayer = null;
+        }
+    }
+
+    @EventHandler
+    public void onChangedWorld(PlayerChangedWorldEvent event) {
+        int calls = changedWorldEvents.incrementAndGet();
+        if (calls != 1
+            || event.isAsynchronous()
+            || !Thread.currentThread().getName().equals("Server thread")
+            || event.getPlayer() != sessionPlayer
+            || event.getFrom() == event.getPlayer().getWorld()
+            || event.getFrom().getEnvironment() != org.bukkit.World.Environment.NORMAL
+            || event.getPlayer().getWorld().getEnvironment() != org.bukkit.World.Environment.NETHER
+            || event.getPlayer().getLocation().getWorld() != event.getPlayer().getWorld()
+            || event.getPlayer().getGameMode() != org.bukkit.GameMode.SURVIVAL
+            || !event.getPlayer().hasPermission("atlas.test.world-transition")) {
+            throw new IllegalStateException("PlayerChangedWorldEvent context/identity/duplicate mismatch");
+        }
+        getLogger().info("[AtlasHybridTestPlugin] PlayerChangedWorldEvent: "
+            + event.getFrom().getName() + " -> " + event.getPlayer().getWorld().getName());
     }
 
     @EventHandler

@@ -708,3 +708,39 @@ remained. The non-daemon OkHttp metadata writer retained the JVM until the
 launcher was interrupted. No Forge server process remained. Regression was
 `118/118`, all integration/external-plugin proofs passed, and both clean builds
 were byte-identical.
+
+## Phase 9.19 world-change invalidation and raw boot #19
+
+The exact LuckPerms 5.5.81 bytecode declares
+`BukkitPlayerCalculator#onWorldChange(PlayerChangedWorldEvent)`. When either
+world or dimension-type contexts are enabled, it obtains `event.getPlayer()`
+and calls `BukkitContextManager#signalContextUpdate(Object)`. The subsequent
+calculator reads game mode, the player's destination world, environment and
+rewritten world name; it does not use `getFrom()` itself. AtlasHybrid
+nevertheless supplies the exact Bukkit source-world contract for all listeners.
+
+| Item | Classification |
+|---|---|
+| Passed boundary | `PlayerChangedWorldEvent` links during listener reflection |
+| Runtime dispatch | public Forge post-dimension event, synchronous and observational |
+| Context state | stable online Player adapter; source from registry; destination visible through Player/Entity/Location; permission attachment preserved |
+| Duplicate policy | one Forge changed-dimension event maps to one Bukkit event; same-world teleport maps to none |
+| New symbol/path | `LPBukkitPlugin.setupContextManager:190` -> `PluginManager#registerEvents` -> `Class#getDeclaredMethods` -> `PlayerGameModeChangeEvent` |
+| Diagnostic | `Missing API: org.bukkit.event.player.PlayerGameModeChangeEvent`, `Status: NOT_IMPLEMENTED` |
+| Category | **CORE_API** context event |
+| H2/commands | storage initialized; command registration remains complete |
+| LuckPerms enable | incomplete; `setupContextManager` incomplete; `LUCKPERMS_ENABLE_REACHED` absent |
+| Phase 9.19 action | stop and document; no context-event cascade |
+
+Forge's public changed-dimension event covers successful normal dimension and
+cross-level teleport paths, including modded keys. It does not cover death
+respawn or the special End-credits return branch; those use a replacement
+`ServerPlayer`/respawn lifecycle and are intentionally deferred rather than
+faked. No Mixin, NMS hook, CraftBukkit facade or LuckPerms-specific behavior was
+added.
+
+Raw boot #19 had eight LuckPerms workers, four OkHttp threads, one Okio
+watchdog and one MVStore writer before stop. After normal dimension saving the
+Server thread was gone, while the same plugin-resource counts remained and the
+non-daemon OkHttp metadata writer retained the JVM. The launcher was
+interrupted after shutdown; no Forge server process remained.
