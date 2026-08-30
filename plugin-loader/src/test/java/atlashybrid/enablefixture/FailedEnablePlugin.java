@@ -6,11 +6,15 @@ import org.bukkit.event.Event;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.HandlerList;
 import org.bukkit.event.Listener;
+import org.bukkit.event.server.PluginDisableEvent;
+import org.bukkit.event.server.PluginEnableEvent;
 import org.bukkit.plugin.ServicePriority;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public final class FailedEnablePlugin extends JavaPlugin {
     public int disableCalls;
+    public int enableEventCalls;
+    public int disableEventCalls;
     public Thread worker;
 
     @Override
@@ -18,6 +22,10 @@ public final class FailedEnablePlugin extends JavaPlugin {
         Listener listener = new Listener() { };
         getServer().getPluginManager().registerEvent(FailureEvent.class, listener, EventPriority.NORMAL,
             (registered, event) -> { }, this, false);
+        getServer().getPluginManager().registerEvent(PluginEnableEvent.class, listener, EventPriority.NORMAL,
+            (registered, event) -> enableEventCalls++, this, false);
+        getServer().getPluginManager().registerEvent(PluginDisableEvent.class, listener, EventPriority.NORMAL,
+            (registered, event) -> disableEventCalls++, this, false);
         getServer().getScheduler().runTaskLater(this, () -> { }, 100);
         getServer().getServicesManager().register(Runnable.class, () -> { }, this, ServicePriority.Normal);
         AtlasPermissions.providers().register(this, (subject, permission) -> java.util.Optional.of(true),

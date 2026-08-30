@@ -27,6 +27,8 @@ import org.bukkit.event.player.PlayerCommandPreprocessEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.server.RemoteServerCommandEvent;
 import org.bukkit.event.server.ServerCommandEvent;
+import org.bukkit.event.server.PluginDisableEvent;
+import org.bukkit.event.server.PluginEnableEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.permissions.Permission;
 import org.bukkit.permissions.PermissionAttachment;
@@ -41,6 +43,8 @@ public final class AtlasHybridTestPlugin extends JavaPlugin implements Listener,
     private final java.util.concurrent.atomic.AtomicInteger localServerCommands = new java.util.concurrent.atomic.AtomicInteger();
     private final java.util.concurrent.atomic.AtomicInteger remoteServerCommands = new java.util.concurrent.atomic.AtomicInteger();
     private final java.util.concurrent.atomic.AtomicInteger playerCommands = new java.util.concurrent.atomic.AtomicInteger();
+    private final java.util.concurrent.atomic.AtomicInteger selfEnableEvents = new java.util.concurrent.atomic.AtomicInteger();
+    private final java.util.concurrent.atomic.AtomicInteger selfDisableEvents = new java.util.concurrent.atomic.AtomicInteger();
 
     @Override
     public void onLoad() {
@@ -93,6 +97,10 @@ public final class AtlasHybridTestPlugin extends JavaPlugin implements Listener,
 
     @Override
     public void onDisable() {
+        if (selfEnableEvents.get() != 1 || selfDisableEvents.get() != 1) {
+            throw new IllegalStateException("Plugin lifecycle event count mismatch at disable: enable="
+                + selfEnableEvents.get() + " disable=" + selfDisableEvents.get());
+        }
         getLogger().info("[AtlasHybridTestPlugin] onDisable");
     }
 
@@ -322,6 +330,26 @@ public final class AtlasHybridTestPlugin extends JavaPlugin implements Listener,
             if (calls != 2) throw new IllegalStateException("Player cancellation command order mismatch");
             event.setCancelled(true);
         }
+    }
+
+    @EventHandler
+    public void onPluginEnable(PluginEnableEvent event) {
+        if (event.getPlugin() != this) return;
+        if (!isEnabled() || !Thread.currentThread().getName().equals("Server thread")
+            || selfEnableEvents.incrementAndGet() != 1) {
+            throw new IllegalStateException("PluginEnableEvent state/thread/duplicate mismatch");
+        }
+        getLogger().info("[AtlasHybridIntegration] PLUGIN_ENABLE_EVENT_OK");
+    }
+
+    @EventHandler
+    public void onPluginDisable(PluginDisableEvent event) {
+        if (event.getPlugin() != this) return;
+        if (!isEnabled() || !Thread.currentThread().getName().equals("Server thread")
+            || selfDisableEvents.incrementAndGet() != 1) {
+            throw new IllegalStateException("PluginDisableEvent state/thread/duplicate mismatch");
+        }
+        getLogger().info("[AtlasHybridIntegration] PLUGIN_DISABLE_EVENT_OK");
     }
 
     private void registerPermissionProof() {

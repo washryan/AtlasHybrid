@@ -7,6 +7,8 @@ import org.bukkit.event.Event;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.HandlerList;
 import org.bukkit.event.Listener;
+import org.bukkit.event.server.PluginDisableEvent;
+import org.bukkit.event.server.PluginEnableEvent;
 import org.bukkit.plugin.ServicePriority;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -16,6 +18,14 @@ public final class AtlasHybridFailedEnableTestPlugin extends JavaPlugin {
         Listener listener = new Listener() { };
         getServer().getPluginManager().registerEvent(FailureProbeEvent.class, listener, EventPriority.NORMAL,
             (registered, event) -> { }, this, false);
+        getServer().getPluginManager().registerEvent(PluginEnableEvent.class, listener, EventPriority.NORMAL,
+            (registered, event) -> {
+                throw new IllegalStateException("Failed plugin received false PluginEnableEvent");
+            }, this, false);
+        getServer().getPluginManager().registerEvent(PluginDisableEvent.class, listener, EventPriority.NORMAL,
+            (registered, event) -> {
+                throw new IllegalStateException("Failed plugin received false PluginDisableEvent");
+            }, this, false);
         getServer().getScheduler().runTaskLater(this, () -> { }, 200);
         getServer().getServicesManager().register(Runnable.class, () -> { }, this, ServicePriority.Normal);
         AtlasPermissions.providers().register(this,

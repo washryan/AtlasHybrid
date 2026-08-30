@@ -566,3 +566,42 @@ The pre/post-stop counts were six daemon LuckPerms workers, four OkHttp threads,
 one daemon Okio watchdog, and one non-daemon OkHttp writer. Minecraft stopped
 and saved normally; the writer retained the JVM until the launcher was
 interrupted. No compatibility server process remained afterward.
+
+## Phase 9.15 plugin lifecycle boundary and raw boot #15
+
+The audited Spigot 1.19.2 API defines `PluginEvent extends ServerEvent` with a
+real `Plugin` reference and public `(Plugin)` constructor. `PluginEnableEvent`
+and `PluginDisableEvent` are synchronous and non-cancellable, each with its own
+static `HandlerList`. Spigot dispatches enable after the enable callback and
+disable before the disable callback and resource cleanup. AtlasHybrid follows
+that successful-path ordering while deliberately suppressing false lifecycle
+events for failed enable attempts.
+
+The existing `EventExecutor` bus performs both dispatches. A two-plugin fixture
+proved earlier-plugin and self-observation, exact-once ordering, observer
+exception isolation, reverse disable, cleanup, and restart. The integration
+proof emitted both lifecycle markers exactly once.
+
+Raw boot #15 produced this boundary result:
+
+| Item | Classification |
+|---|---|
+| Passed boundary | `PluginEnableEvent` links in `BukkitPlatformListener` |
+| Platform listener status | `BukkitConnectionListener` complete; `BukkitPlatformListener` complete |
+| Checkpoint | `LUCKPERMS_PLATFORM_LISTENERS_REGISTERED` |
+| Method status | `LPBukkitPlugin.registerPlatformListeners` complete |
+| Later progress | H2 storage initialized; `LPBukkitPlugin.registerCommands` entered |
+| New symbol/path | `BukkitCommandExecutor.register:75` -> `PluginManager#registerEvents` -> `Class#getDeclaredMethods` -> `org.bukkit.entity.Entity` |
+| Diagnostic | `Missing API: org.bukkit.entity.Entity`, `Status: NOT_IMPLEMENTED` |
+| Public API? | Yes; Bukkit base entity interface |
+| Why linked here | compiler-generated selector pipeline method is resolved during declared-method reflection; selector execution was not reached |
+| Category | **CORE_API** |
+| LuckPerms enable | incomplete; `LUCKPERMS_ENABLE_REACHED` not recorded |
+| Phase 9.15 action | stop and document; no cascade implementation |
+
+The pre-stop dump showed ten daemon LuckPerms workers, four OkHttp threads,
+one daemon Okio watchdog, one daemon H2 MVStore writer, and one non-daemon
+OkHttp metadata writer. After normal Minecraft stop, nine workers, three
+OkHttp threads including the writer, and the H2 writer remained; the watchdog
+had exited. The writer retained the JVM until the launcher was interrupted. No
+server process remained afterward.

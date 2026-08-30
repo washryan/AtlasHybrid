@@ -647,3 +647,59 @@ shutdown, leaving no compatibility server process. The suite passed `110/110`,
 the complete integration/WelcomeMessage/WarpPlugin regressions passed, and two
 clean builds produced byte-identical runtime, test-plugin and test-mod JARs.
 LuckPerms remains **BLOCKED** and unsupported.
+
+## Phase 9.15 raw boot #15
+
+Phase 9.15 adds the generic synchronous, non-cancellable Bukkit plugin
+lifecycle events. `PluginEnableEvent` is published exactly once after a
+successful `onEnable`; `PluginDisableEvent` is published exactly once before
+`onDisable` and resource cleanup. Failed enable attempts publish neither event.
+The controlled Forge proof emitted `PLUGIN_ENABLE_EVENT_OK` and
+`PLUGIN_DISABLE_EVENT_OK` exactly once while the failed-enable rollback and all
+previous integration markers remained intact.
+
+The unchanged LuckPerms artifact crossed the former lifecycle reflection
+boundary. Both `BukkitConnectionListener` and `BukkitPlatformListener`
+registered, so raw boot #15 records:
+
+```text
+LUCKPERMS_PLATFORM_LISTENERS_REGISTERED
+```
+
+`registerPlatformListeners` completed. LuckPerms then initialized its H2
+storage and reached command registration. Reflection of
+`BukkitCommandExecutor` stopped at the next public API type:
+
+```text
+[AtlasHybrid Compatibility]
+Plugin: LuckPerms
+Missing API: org.bukkit.entity.Entity
+Status: NOT_IMPLEMENTED
+Runtime: 0.1.0-alpha
+
+java.lang.NoClassDefFoundError: org/bukkit/entity/Entity
+    at java.lang.Class.getDeclaredMethods0(Native Method)
+    at dev.atlashybrid.runtime.event.AtlasPluginManager.registerEvents(AtlasPluginManager.java:57)
+    at me.lucko.luckperms.bukkit.BukkitCommandExecutor.register(BukkitCommandExecutor.java:75)
+    at me.lucko.luckperms.bukkit.LPBukkitPlugin.registerCommands(LPBukkitPlugin.java:159)
+```
+
+Classification: **CORE_API**. `Entity` is the public Bukkit base entity
+contract. In this path it is linked by compiler-generated selector handling in
+`BukkitCommandExecutor` while `registerEvents` reflects declared methods; it is
+not evidence that entity selection executed. No stub or cascade fix was added.
+LuckPerms `onEnable` did not complete, so `LUCKPERMS_ENABLE_REACHED` was not
+recorded and no functional LuckPerms test was started.
+
+Before stop the JVM contained ten daemon `luckperms-worker-*` threads, four
+OkHttp threads (three daemon and one non-daemon metadata writer), one daemon
+Okio watchdog, and one daemon H2 MVStore writer. Normal `stop` saved all
+dimensions. After stop, nine daemon LuckPerms workers, three OkHttp threads
+including the non-daemon writer, and the H2 writer remained; the Okio watchdog
+had exited. The non-daemon writer retained the JVM. The Gradle launcher was
+interrupted after this diagnosis, and no compatibility server process remained.
+
+The full suite passed `113/113`, integration and the
+WelcomeMessage/WarpPlugin regressions passed, and two clean builds produced
+byte-identical runtime, test-plugin, and test-mod JARs. LuckPerms remains
+**BLOCKED** and unsupported.

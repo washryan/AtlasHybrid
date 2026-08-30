@@ -82,6 +82,8 @@ class PluginEnableFailureTest {
 
             assertFalse(plugin.isEnabled());
             assertEquals(1, plugin.getClass().getField("disableCalls").getInt(plugin));
+            assertEquals(0, plugin.getClass().getField("enableEventCalls").getInt(plugin));
+            assertEquals(0, plugin.getClass().getField("disableEventCalls").getInt(plugin));
             assertTrue(HandlerList.getRegisteredListeners(plugin).isEmpty());
             assertEquals(0, scheduler.pendingTasks(plugin));
             assertEquals(0, services.getRegistrations(plugin).size());
@@ -106,6 +108,8 @@ class PluginEnableFailureTest {
             runtime.enableAll();
             assertFalse(plugin.isEnabled());
             assertEquals(2, plugin.getClass().getField("disableCalls").getInt(plugin));
+            assertEquals(0, plugin.getClass().getField("enableEventCalls").getInt(plugin));
+            assertEquals(0, plugin.getClass().getField("disableEventCalls").getInt(plugin));
             assertTrue(HandlerList.getRegisteredListeners(plugin).isEmpty());
             assertEquals(0, scheduler.pendingTasks(plugin));
             assertEquals(0, services.getRegistrations(plugin).size());

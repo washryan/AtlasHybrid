@@ -21,6 +21,8 @@ import java.util.logging.Logger;
 import java.util.stream.Stream;
 import org.bukkit.Server;
 import org.bukkit.event.Event;
+import org.bukkit.event.server.PluginDisableEvent;
+import org.bukkit.event.server.PluginEnableEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.plugin.java.JavaPluginBootstrap;
 import org.bukkit.plugin.java.PluginBootstrapPhaseException;
@@ -129,11 +131,13 @@ public final class PluginRuntime implements AutoCloseable {
 
     public void enableAll() {
         for (LoadedPlugin item : loaded) {
+            if (item.plugin().isEnabled()) continue;
             PluginThreadMonitor.Snapshot threadBaseline = threadMonitor.capture();
             try {
                 try (CompatibilityRuntime.Scope ignored = CompatibilityRuntime.enter(item.plugin().getName())) {
                     item.plugin().atlasSetEnabled(true);
                 }
+                pluginManager.callEvent(new PluginEnableEvent(item.plugin()));
                 logger.info("Enabled plugin " + item.plugin().getDescription().getFullName());
             } catch (Throwable throwable) {
                 reportCompatibilityFailure(item.plugin().getName(), throwable);
@@ -148,15 +152,18 @@ public final class PluginRuntime implements AutoCloseable {
         for (int index = loaded.size() - 1; index >= 0; index--) {
             LoadedPlugin item = loaded.get(index);
             JavaPlugin plugin = item.plugin();
-            scheduler.cancelTasks(plugin);
-            commands.unregister(plugin);
             if (plugin.isEnabled()) {
-                try (CompatibilityRuntime.Scope ignored = CompatibilityRuntime.enter(plugin.getName())) { plugin.atlasSetEnabled(false); }
+                pluginManager.callEvent(new PluginDisableEvent(plugin));
+                try (CompatibilityRuntime.Scope ignored = CompatibilityRuntime.enter(plugin.getName())) {
+                    plugin.atlasSetEnabled(false);
+                }
                 catch (Throwable throwable) {
                     reportCompatibilityFailure(plugin.getName(), throwable);
                     logger.log(Level.SEVERE, "Failed to disable plugin " + plugin.getName(), throwable);
                 }
             }
+            scheduler.cancelTasks(plugin);
+            commands.unregister(plugin);
             pluginManager.unregisterPlugin(plugin);
         }
     }

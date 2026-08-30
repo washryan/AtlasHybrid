@@ -17,6 +17,11 @@ that callback `isEnabled()` remains true, matching normal disable semantics.
 Any disable failure is preserved as a suppressed exception on the original
 enable failure and cannot prevent AtlasHybrid-owned rollback.
 
+The compensating callback does not publish `PluginDisableEvent`, because the
+plugin never completed enable. `PluginEnableEvent` is likewise never published
+for the failed attempt. Successful lifecycle event ordering is documented in
+[`PLUGIN_LIFECYCLE_EVENT_API.md`](PLUGIN_LIFECYCLE_EVENT_API.md).
+
 ## Atomic rollback
 
 After a failed enable, AtlasHybrid removes plugin-owned:
@@ -48,5 +53,6 @@ concrete cross-plugin evidence; none is introduced in this phase.
 The failed-enable fixture registers a listener, task, service, provider,
 attachment and command, starts a controlled thread, then throws. Tests verify
 the disabled state, best-effort `onDisable`, complete Atlas resource rollback,
-thread detection, clean retry, and classloader-close ordering. The Forge proof
-emits `FAILED_ENABLE_ROLLBACK_OK` exactly once.
+thread detection, clean retry, classloader-close ordering, and zero false
+enable/disable events. The Forge proof emits `FAILED_ENABLE_ROLLBACK_OK`
+exactly once.

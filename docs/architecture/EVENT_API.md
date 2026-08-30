@@ -33,10 +33,16 @@ plugin. Plugin disable and failed-enable rollback unregister every listener
 owned by that plugin. A later registration therefore starts cleanly and cannot
 inherit dead or duplicate listeners from the previous lifecycle.
 
+Plugin lifecycle events use this same registration and dispatch path. Enable is
+published after successful `onEnable`; disable is published before `onDisable`
+and ownership cleanup while the plugin is still enabled. See
+[`PLUGIN_LIFECYCLE_EVENT_API.md`](PLUGIN_LIFECYCLE_EVENT_API.md).
+
 ## Validation
 
 Focused tests cover explicit and annotated registration, all priority slots,
 stable ordering within a slot, both cancelled-event policies, wrong event type,
 executor failure with continued dispatch, listener/plugin unregister, exact-once
 delivery and clean re-registration. The Forge proof emits
-`EVENT_EXECUTOR_OK` exactly once.
+`EVENT_EXECUTOR_OK`, `PLUGIN_ENABLE_EVENT_OK`, and
+`PLUGIN_DISABLE_EVENT_OK` exactly once.
