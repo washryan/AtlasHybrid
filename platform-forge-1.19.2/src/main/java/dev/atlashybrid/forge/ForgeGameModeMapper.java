@@ -16,4 +16,13 @@ final class ForgeGameModeMapper {
             case SPECTATOR -> GameMode.SPECTATOR;
         };
     }
+
+    static GameType toMinecraft(GameMode mode) {
+        return switch (Objects.requireNonNull(mode, "mode")) {
+            case SURVIVAL -> GameType.SURVIVAL;
+            case CREATIVE -> GameType.CREATIVE;
+            case ADVENTURE -> GameType.ADVENTURE;
+            case SPECTATOR -> GameType.SPECTATOR;
+        };
+    }
 }

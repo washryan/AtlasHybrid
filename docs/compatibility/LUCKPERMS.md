@@ -886,3 +886,38 @@ Forge server process remained.
 Final regression was `120/120`; integration, WelcomeMessage and WarpPlugin
 passed; `PLAYER_CHANGED_WORLD_OK` appeared exactly once; and clean builds A/B
 produced byte-identical runtime, test-plugin and test-mod JARs.
+
+## Phase 9.20 raw boot #20
+
+Phase 9.20 adds the exact cancellable Bukkit 1.19.2
+`PlayerGameModeChangeEvent` and bridges Forge's public pre-transition
+`PlayerChangeGameModeEvent`. Allowed changes update the real player and the
+existing adapter snapshot exactly once; cancellation preserves both old
+states. `Player#setGameMode` enters the same pipeline. See
+[`PLAYER_GAMEMODE_CHANGE_EVENT_API.md`](../architecture/PLAYER_GAMEMODE_CHANGE_EVENT_API.md).
+
+LuckPerms' `BukkitPlayerCalculator` registers its `MONITOR`,
+`ignoreCancelled=true` handler. Allowed changes signal a player-context update;
+cancelled changes are ignored. Raw boot #20 crossed listener reflection and
+completed context-manager registration. Storage/H2 and commands remained
+healthy. The next failure occurred later in `setupPlatformHooks`:
+
+```text
+java.lang.NoClassDefFoundError: org/bukkit/plugin/SimplePluginManager
+    at me.lucko.luckperms.bukkit.inject.server.InjectorSubscriptionMap.<clinit>(InjectorSubscriptionMap.java:46)
+    at me.lucko.luckperms.bukkit.LPBukkitPlugin.setupPlatformHooks(LPBukkitPlugin.java:197)
+```
+
+`LUCKPERMS_CONTEXT_MANAGER_REGISTERED` is therefore reached, while
+`LUCKPERMS_ENABLE_REACHED` is not. This is an **ARCHITECTURAL**
+CraftBukkit/plugin-manager injection boundary, not a permanent incompatibility
+classification. No `SimplePluginManager` shape, private reflection workaround,
+permission injection or plugin-specific runtime code was added.
+
+Before stop, the failed enable reported one daemon LuckPerms worker, three
+OkHttp threads including one non-daemon metadata writer, one daemon Okio
+watchdog and one daemon H2 MVStore writer. Normal Minecraft stop saved every
+dimension and removed the Server thread. Plugin resources remained because the
+partial LuckPerms shutdown was incomplete; the non-daemon OkHttp writer retained
+the JVM. The launcher was interrupted only after server shutdown, and no Forge
+server process remained.

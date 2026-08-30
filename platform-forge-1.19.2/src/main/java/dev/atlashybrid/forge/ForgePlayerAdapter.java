@@ -45,6 +45,12 @@ final class ForgePlayerAdapter implements Player, AutoCloseable {
 
     @Override public UUID getUniqueId() { return player.getUUID(); }
     @Override public GameMode getGameMode() { return gameModeSnapshot; }
+    @Override public void setGameMode(GameMode mode) {
+        if (!player.server.isSameThread()) {
+            throw new IllegalStateException("Player#setGameMode must execute on the Server thread");
+        }
+        player.setGameMode(ForgeGameModeMapper.toMinecraft(mode));
+    }
     @Override public int getEntityId() { return player.getId(); }
     @Override public World getWorld() {
         return ((ForgeServerAdapter) org.bukkit.Bukkit.getServer()).world(player.getLevel());

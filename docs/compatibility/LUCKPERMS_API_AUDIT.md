@@ -744,3 +744,33 @@ watchdog and one MVStore writer before stop. After normal dimension saving the
 Server thread was gone, while the same plugin-resource counts remained and the
 non-daemon OkHttp metadata writer retained the JVM. The launcher was
 interrupted after shutdown; no Forge server process remained.
+
+## Phase 9.20 game-mode invalidation and raw boot #20
+
+The exact LuckPerms 5.5.81 handler is registered at `MONITOR` with
+`ignoreCancelled=true`. When game-mode contexts are enabled it calls
+`BukkitContextManager#signalContextUpdate(event.getPlayer())`. Subsequent
+context calculation reads the player's new snapshot after Minecraft completes
+the allowed transition. Cancelled Bukkit events never invalidate the cache and
+never change the real or exposed mode.
+
+| Item | Classification |
+|---|---|
+| Passed boundary | `PlayerGameModeChangeEvent` links and its listener registers |
+| Runtime dispatch | public cancellable Forge pre-transition event |
+| Old/new semantics | Player exposes old mode during the event; event exposes requested mode |
+| Cancellation | propagated to Forge and prevents the real transition |
+| Duplicate policy | one real transition maps to one event; same-mode request maps to none |
+| Context manager | complete; `LUCKPERMS_CONTEXT_MANAGER_REGISTERED` reached |
+| Storage/commands | H2 initialized and command registration complete |
+| New symbol/path | `LPBukkitPlugin.setupPlatformHooks:197` -> `InjectorSubscriptionMap.<clinit>` -> `SimplePluginManager` |
+| Diagnostic | `NoClassDefFoundError: org/bukkit/plugin/SimplePluginManager` |
+| Category | **ARCHITECTURAL** CraftBukkit/plugin-manager injection boundary |
+| LuckPerms enable | incomplete; `LUCKPERMS_ENABLE_REACHED` absent |
+| Phase 9.20 action | stop; no compatibility shape, injection or cascading implementation |
+
+The raw boot's failed-enable inventory reported one LuckPerms worker, three
+OkHttp threads, one Okio watchdog and one MVStore writer. One OkHttp metadata
+writer was non-daemon. Minecraft shutdown completed and saved all worlds, but
+the partial plugin resources retained the JVM until the launcher was
+interrupted. No server process remained.

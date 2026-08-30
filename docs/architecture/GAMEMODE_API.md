@@ -1,8 +1,8 @@
 # GameMode and player context foundation
 
-Phase 9.17 adds the Bukkit 1.19.2 game-mode enum and a thread-safe view of a
-player's real Minecraft game type. It does not implement the broader player
-context API.
+Phase 9.17 added the Bukkit 1.19.2 game-mode enum and a thread-safe view of a
+player's real Minecraft game type. Phase 9.20 completes the mutation contract
+with `Player#setGameMode(GameMode)` and the cancellable real-transition event.
 
 ## Public contract
 
@@ -12,9 +12,9 @@ The Spigot 1.19.2 enum declaration order is `CREATIVE`, `SURVIVAL`,
 `getByValue(int)` returns the matching constant or `null` for an unknown value.
 
 The official `HumanEntity` contract declares both `getGameMode()` and
-`setGameMode(GameMode)`. LuckPerms only calls the getter. Phase 9.17 exposes the
-getter through the existing HumanEntity/Player hierarchy and deliberately
-defers the setter rather than publishing an adapter-only mutation.
+`setGameMode(GameMode)`. The setter now delegates to the real Minecraft player
+on the server thread and uses the same event pipeline as vanilla, Forge and
+internal changes. It never mutates only the adapter.
 
 ## Forge mapping and thread model
 
@@ -28,9 +28,11 @@ server thread. `ServerPlayerGameMode#gameModeForPlayer` is neither volatile nor
 an API documented for off-thread reads. `ForgePlayerAdapter#getGameMode`
 therefore returns a volatile snapshot. The snapshot is initialized from the
 real player and updated on the server thread at Forge's LOWEST
-`PlayerChangeGameModeEvent` priority, after ordinary handlers have had an
-opportunity to cancel or replace the target mode. No Mixin, polling loop or
-parallel synthetic state is used.
+`PlayerChangeGameModeEvent` priority, after ordinary Forge handlers have had an
+opportunity to cancel or replace the target mode. The Bukkit event runs while
+the snapshot still contains the old mode. Successful transitions update it
+exactly once; cancelled transitions leave it unchanged. No Mixin, polling loop
+or parallel synthetic state is used.
 
 Connecting players already have a real `ServerPlayerGameMode`, so their initial
 snapshot is valid. Promotion reuses the same adapter. Disconnect removes and
@@ -52,17 +54,16 @@ The exact public API used by the calculator is:
 | Manager identity/options | `Player#getUniqueId()`, `Player#isOp()`, permissible lookup |
 
 It does not read location, locale, address, client brand, inventory, potion
-effects, metadata or persistent data. AtlasHybrid already supplies UUID, op,
-join, world identity/name and game mode. `World.Environment`,
-`World#getEnvironment`, `Server#getWorlds`, `PlayerChangedWorldEvent` and
-`PlayerGameModeChangeEvent` remain outside this phase. The expected next
-linkage boundary is therefore a world/dimension or change-event symbol, but raw
-boot #17 determines the actual order.
+effects, metadata or persistent data. AtlasHybrid now supplies UUID, op, join,
+world identity/name/environment, game mode and both context-change events. Raw
+boot #20 confirms that the complete calculator and its listeners register
+successfully. The remaining `Server#getWorlds()` surface is used when
+estimating potential contexts, but it was not the next bootstrap boundary.
 
 ## Proof scope
 
-Unit tests verify enum order, legacy values, invalid lookup behavior, all four
-explicit Minecraft-to-Bukkit mappings and mapper null rejection. The
-integration proof changes a real server player's Minecraft mode through all
-four `GameType` values, verifies the same stable Bukkit adapter after each
-change, restores Survival, and emits `GAMEMODE_API_OK` exactly once.
+Unit tests verify enum order, legacy values, invalid lookup behavior, both
+mapping directions, event construction, handler list and cancellation. The
+integration proof verifies one allowed and one cancelled real transition,
+same-mode duplicate suppression and the stable adapter. See
+[`PLAYER_GAMEMODE_CHANGE_EVENT_API.md`](PLAYER_GAMEMODE_CHANGE_EVENT_API.md).

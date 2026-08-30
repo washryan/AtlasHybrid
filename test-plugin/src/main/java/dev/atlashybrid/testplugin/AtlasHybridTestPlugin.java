@@ -25,6 +25,7 @@ import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerLoginEvent;
 import org.bukkit.event.player.PlayerCommandPreprocessEvent;
 import org.bukkit.event.player.PlayerChangedWorldEvent;
+import org.bukkit.event.player.PlayerGameModeChangeEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.server.RemoteServerCommandEvent;
 import org.bukkit.event.server.ServerCommandEvent;
@@ -41,6 +42,7 @@ public final class AtlasHybridTestPlugin extends JavaPlugin implements Listener,
     private org.bukkit.entity.Player sessionPlayer;
     private PermissionAttachment sessionAttachment;
     private final java.util.concurrent.atomic.AtomicInteger changedWorldEvents = new java.util.concurrent.atomic.AtomicInteger();
+    private final java.util.concurrent.atomic.AtomicInteger gameModeChangeEvents = new java.util.concurrent.atomic.AtomicInteger();
     private final java.util.concurrent.ConcurrentMap<String, java.util.List<String>> loginOrder =
         new java.util.concurrent.ConcurrentHashMap<>();
     private final java.util.concurrent.atomic.AtomicInteger localServerCommands = new java.util.concurrent.atomic.AtomicInteger();
@@ -172,6 +174,15 @@ public final class AtlasHybridTestPlugin extends JavaPlugin implements Listener,
             }
             return true;
         }
+        if (args.length == 1 && "gamemode-transition-proof".equals(args[0])) {
+            if (sender != sessionPlayer || gameModeChangeEvents.get() != 2
+                || !(sender instanceof org.bukkit.entity.Player player)
+                || player.getGameMode() != org.bukkit.GameMode.CREATIVE
+                || !player.hasPermission("atlas.test.world-transition")) {
+                throw new IllegalStateException("PlayerGameModeChangeEvent integration state mismatch");
+            }
+            return true;
+        }
         sender.sendMessage("Usage: /atlas [info|permission <node>]; got " + Arrays.toString(args));
         return false;
     }
@@ -292,12 +303,38 @@ public final class AtlasHybridTestPlugin extends JavaPlugin implements Listener,
             || event.getFrom().getEnvironment() != org.bukkit.World.Environment.NORMAL
             || event.getPlayer().getWorld().getEnvironment() != org.bukkit.World.Environment.NETHER
             || event.getPlayer().getLocation().getWorld() != event.getPlayer().getWorld()
-            || event.getPlayer().getGameMode() != org.bukkit.GameMode.SURVIVAL
+            || event.getPlayer().getGameMode() != org.bukkit.GameMode.CREATIVE
             || !event.getPlayer().hasPermission("atlas.test.world-transition")) {
             throw new IllegalStateException("PlayerChangedWorldEvent context/identity/duplicate mismatch");
         }
         getLogger().info("[AtlasHybridTestPlugin] PlayerChangedWorldEvent: "
             + event.getFrom().getName() + " -> " + event.getPlayer().getWorld().getName());
+    }
+
+    @EventHandler
+    public void onGameModeChange(PlayerGameModeChangeEvent event) {
+        int calls = gameModeChangeEvents.incrementAndGet();
+        if (event.isAsynchronous()
+            || !Thread.currentThread().getName().equals("Server thread")
+            || event.getPlayer() != sessionPlayer) {
+            throw new IllegalStateException("PlayerGameModeChangeEvent player/thread mismatch");
+        }
+        if (calls == 1) {
+            if (event.getPlayer().getGameMode() != org.bukkit.GameMode.SURVIVAL
+                || event.getNewGameMode() != org.bukkit.GameMode.CREATIVE) {
+                throw new IllegalStateException("Allowed game-mode event old/new context mismatch");
+            }
+            return;
+        }
+        if (calls == 2) {
+            if (event.getPlayer().getGameMode() != org.bukkit.GameMode.CREATIVE
+                || event.getNewGameMode() != org.bukkit.GameMode.SURVIVAL) {
+                throw new IllegalStateException("Cancelled game-mode event old/new context mismatch");
+            }
+            event.setCancelled(true);
+            return;
+        }
+        throw new IllegalStateException("Duplicate PlayerGameModeChangeEvent dispatch");
     }
 
     @EventHandler

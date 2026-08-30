@@ -47,6 +47,7 @@ import org.bukkit.event.player.AsyncPlayerPreLoginEvent;
 import org.bukkit.event.player.PlayerLoginEvent;
 import org.bukkit.event.player.PlayerCommandPreprocessEvent;
 import org.bukkit.event.player.PlayerChangedWorldEvent;
+import org.bukkit.event.player.PlayerGameModeChangeEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.server.RemoteServerCommandEvent;
@@ -362,11 +363,31 @@ public final class AtlasHybridMod {
         pluginManager.callEvent(new PlayerChangedWorldEvent(adapter, from));
     }
 
-    @SubscribeEvent(priority = EventPriority.LOWEST)
+    @SubscribeEvent(priority = EventPriority.LOWEST, receiveCanceled = true)
     public void onPlayerGameModeChange(PlayerEvent.PlayerChangeGameModeEvent event) {
-        if (serverAdapter != null && !event.isCanceled() && event.getEntity() instanceof ServerPlayer player) {
-            serverAdapter.updateGameMode(player, event.getNewGameMode());
+        if (pluginManager == null || serverAdapter == null || event.isCanceled()
+            || !(event.getEntity() instanceof ServerPlayer player)) return;
+        if (!player.server.isSameThread()) {
+            throw new IllegalStateException("PlayerGameModeChangeEvent must execute on the Server thread");
         }
+        ForgePlayerAdapter adapter = serverAdapter.onlinePlayer(player);
+        if (adapter == null) {
+            serverAdapter.updateGameMode(player, event.getNewGameMode());
+            return;
+        }
+        org.bukkit.GameMode current = ForgeGameModeMapper.toBukkit(event.getCurrentGameMode());
+        org.bukkit.GameMode target = ForgeGameModeMapper.toBukkit(event.getNewGameMode());
+        if (current == target) return;
+        if (adapter.getGameMode() != current) {
+            throw new IllegalStateException("Player game-mode snapshot did not reflect the pre-change mode");
+        }
+        PlayerGameModeChangeEvent bridged = new PlayerGameModeChangeEvent(adapter, target);
+        pluginManager.callEvent(bridged);
+        if (bridged.isCancelled()) {
+            event.setCanceled(true);
+            return;
+        }
+        serverAdapter.updateGameMode(player, event.getNewGameMode());
     }
 
     @SubscribeEvent(priority = EventPriority.LOWEST, receiveCanceled = true)
