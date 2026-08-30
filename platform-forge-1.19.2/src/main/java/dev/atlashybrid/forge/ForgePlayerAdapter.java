@@ -36,6 +36,7 @@ final class ForgePlayerAdapter implements Player, AutoCloseable {
     }
 
     void initializePermissions() { permissions.recalculatePermissions(); }
+    net.minecraft.commands.CommandSourceStack commandSource() { return player.createCommandSourceStack(); }
 
     @Override public UUID getUniqueId() { return player.getUUID(); }
     @Override public String getDisplayName() { throw CompatibilityRuntime.unsupported("org.bukkit.entity.Player#getDisplayName", "bukkit-player", CompatibilityStatus.NOT_IMPLEMENTED); }

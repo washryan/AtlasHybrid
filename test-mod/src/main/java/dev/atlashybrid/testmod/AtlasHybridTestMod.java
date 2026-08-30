@@ -357,6 +357,13 @@ public final class AtlasHybridTestMod {
             || onlinePlayer != bukkitServer.getOnlinePlayers().iterator().next()) {
             throw new IllegalStateException("Online player registry did not expose a stable adapter");
         }
+        int playerMutation = server.getCommands().performPrefixedCommand(
+            player.createCommandSourceStack(), "atlas player-original");
+        server.getCommands().performPrefixedCommand(
+            player.createCommandSourceStack(), "atlas player-cancelled");
+        if (playerMutation != 1) throw new IllegalStateException("Player command mutation did not execute");
+        LOGGER.info("[AtlasHybridIntegration] PLAYER_COMMAND_PREPROCESS_OK");
+        LOGGER.info("[AtlasHybridIntegration] PLAYER_COMMAND_PREPROCESS_CANCEL_OK");
         runExternalRegressionIfPresent(player);
         level.setBlockAndUpdate(position, Blocks.STONE.defaultBlockState());
         boolean destroyed = player.gameMode.destroyBlock(position);

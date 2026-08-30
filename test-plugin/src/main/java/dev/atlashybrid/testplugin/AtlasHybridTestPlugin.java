@@ -23,6 +23,7 @@ import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.player.AsyncPlayerPreLoginEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerLoginEvent;
+import org.bukkit.event.player.PlayerCommandPreprocessEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.server.RemoteServerCommandEvent;
 import org.bukkit.event.server.ServerCommandEvent;
@@ -39,6 +40,7 @@ public final class AtlasHybridTestPlugin extends JavaPlugin implements Listener,
         new java.util.concurrent.ConcurrentHashMap<>();
     private final java.util.concurrent.atomic.AtomicInteger localServerCommands = new java.util.concurrent.atomic.AtomicInteger();
     private final java.util.concurrent.atomic.AtomicInteger remoteServerCommands = new java.util.concurrent.atomic.AtomicInteger();
+    private final java.util.concurrent.atomic.AtomicInteger playerCommands = new java.util.concurrent.atomic.AtomicInteger();
 
     @Override
     public void onLoad() {
@@ -136,6 +138,19 @@ public final class AtlasHybridTestPlugin extends JavaPlugin implements Listener,
             }
             sender.sendMessage("remote server mutation executed");
             return true;
+        }
+        if (args.length == 1 && "player-original".equals(args[0])) {
+            throw new IllegalStateException("Original player command executed after mutation");
+        }
+        if (args.length == 1 && "player-mutated".equals(args[0])) {
+            if (playerCommands.get() != 1 || sender != sessionPlayer) {
+                throw new IllegalStateException("Mutated player command sender/count mismatch");
+            }
+            sender.sendMessage("player command mutation executed");
+            return true;
+        }
+        if (args.length == 1 && "player-cancelled".equals(args[0])) {
+            throw new IllegalStateException("Cancelled player command executed");
         }
         sender.sendMessage("Usage: /atlas [info|permission <node>]; got " + Arrays.toString(args));
         return false;
@@ -288,6 +303,25 @@ public final class AtlasHybridTestPlugin extends JavaPlugin implements Listener,
             throw new IllegalStateException("Duplicate RemoteServerCommandEvent dispatch");
         }
         event.setCommand("atlas remote-mutated");
+    }
+
+    @EventHandler(priority = EventPriority.LOWEST)
+    public void onPlayerCommand(PlayerCommandPreprocessEvent event) {
+        if (!event.getMessage().equals("/atlas player-original")
+            && !event.getMessage().equals("/atlas player-cancelled")) return;
+        if (event.getPlayer() != sessionPlayer
+            || !Thread.currentThread().getName().equals("Server thread")) {
+            throw new IllegalStateException("PlayerCommandPreprocessEvent sender/thread mismatch");
+        }
+        int calls = playerCommands.incrementAndGet();
+        if (calls > 2) throw new IllegalStateException("Duplicate PlayerCommandPreprocessEvent dispatch");
+        if (event.getMessage().equals("/atlas player-original")) {
+            if (calls != 1) throw new IllegalStateException("Player mutation command order mismatch");
+            event.setMessage("/atlas player-mutated");
+        } else {
+            if (calls != 2) throw new IllegalStateException("Player cancellation command order mismatch");
+            event.setCancelled(true);
+        }
     }
 
     private void registerPermissionProof() {

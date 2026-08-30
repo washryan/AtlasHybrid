@@ -31,6 +31,7 @@ import org.bukkit.event.HandlerList;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.AsyncPlayerPreLoginEvent;
 import org.bukkit.event.player.PlayerLoginEvent;
+import org.bukkit.event.player.PlayerCommandPreprocessEvent;
 import org.bukkit.event.server.RemoteServerCommandEvent;
 import org.bukkit.event.server.ServerCommandEvent;
 import org.bukkit.entity.Player;
@@ -236,6 +237,33 @@ class EventApiTest {
         manager.callEvent(new RemoteServerCommandEvent(new TestSender(), "list"));
         assertEquals(0, local.get());
         assertEquals(1, remote.get());
+    }
+
+    @Test
+    void playerCommandUsesPriorityMutationCancellationAndExceptionPolicyOnce() {
+        List<String> order = new ArrayList<>();
+        Player player = (Player) java.lang.reflect.Proxy.newProxyInstance(Player.class.getClassLoader(),
+            new Class<?>[] { Player.class }, (proxy, method, arguments) -> null);
+        manager.registerEvent(PlayerCommandPreprocessEvent.class, new Listener() { }, EventPriority.LOWEST,
+            (registered, raw) -> {
+                order.add("lowest");
+                ((PlayerCommandPreprocessEvent) raw).setMessage("/atlas changed");
+            }, plugin);
+        manager.registerEvent(PlayerCommandPreprocessEvent.class, new NamedListener(), EventPriority.NORMAL,
+            (registered, event) -> { throw new EventException(new IllegalStateException("player command boom")); }, plugin);
+        manager.registerEvent(PlayerCommandPreprocessEvent.class, new Listener() { }, EventPriority.MONITOR,
+            (registered, raw) -> {
+                order.add("monitor");
+                ((PlayerCommandPreprocessEvent) raw).setCancelled(true);
+            }, plugin);
+        PlayerCommandPreprocessEvent event = new PlayerCommandPreprocessEvent(player, "/atlas original", new java.util.HashSet<>());
+        manager.callEvent(event);
+        assertEquals(List.of("lowest", "monitor"), order);
+        assertEquals("/atlas changed", event.getMessage());
+        assertTrue(event.isCancelled());
+        assertTrue(logs.records.stream().anyMatch(record ->
+            record.getMessage().contains("Event: PlayerCommandPreprocessEvent")
+                && record.getMessage().contains("Status: EXECUTION_FAILED")));
     }
 
     private void register(List<String> order, String value, EventPriority priority) {

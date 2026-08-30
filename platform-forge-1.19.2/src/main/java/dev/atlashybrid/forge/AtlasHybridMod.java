@@ -45,6 +45,7 @@ import org.bukkit.Bukkit;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.player.AsyncPlayerPreLoginEvent;
 import org.bukkit.event.player.PlayerLoginEvent;
+import org.bukkit.event.player.PlayerCommandPreprocessEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.server.RemoteServerCommandEvent;
@@ -246,6 +247,32 @@ public final class AtlasHybridMod {
         if (pluginManager == null || serverAdapter == null) return;
         var parse = event.getParseResults();
         CommandSourceStack source = parse.getContext().getSource();
+        if (source.getEntity() instanceof ServerPlayer player) {
+            if (!source.getServer().isSameThread()) {
+                throw new IllegalStateException("Player command events must execute on the Server thread");
+            }
+            ForgePlayerAdapter sender = serverAdapter.player(player);
+            String original = parse.getReader().getString();
+            PlayerCommandPreprocessEvent bridged = new PlayerCommandPreprocessEvent(sender, "/" + original);
+            pluginManager.callEvent(bridged);
+            if (bridged.isCancelled()) {
+                event.setCanceled(true);
+                return;
+            }
+            String command = bridged.getMessage().substring(1);
+            CommandSourceStack executionSource = source;
+            if (bridged.getPlayer() != sender) {
+                if (!(bridged.getPlayer() instanceof ForgePlayerAdapter replacement)) {
+                    throw new IllegalArgumentException("PlayerCommandPreprocessEvent player is not managed by AtlasHybrid");
+                }
+                executionSource = replacement.commandSource();
+            }
+            if (!java.util.Objects.equals(original, command) || executionSource != source) {
+                event.setParseResults(source.getServer().getCommands().getDispatcher()
+                    .parse(command, executionSource));
+            }
+            return;
+        }
         boolean remote = source.source instanceof net.minecraft.server.rcon.RconConsoleSource;
         boolean localConsole = source.source == source.getServer();
         if (!remote && !localConsole) return;

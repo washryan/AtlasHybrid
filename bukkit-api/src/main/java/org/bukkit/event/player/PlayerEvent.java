@@ -5,7 +5,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.Event;
 
 public abstract class PlayerEvent extends Event {
-    private final Player player;
+    protected Player player;
 
     protected PlayerEvent(Player player) {
         this.player = Objects.requireNonNull(player, "player");

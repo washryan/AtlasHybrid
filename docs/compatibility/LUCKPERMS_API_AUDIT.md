@@ -530,3 +530,39 @@ The pre-stop and post-stop dumps both showed seven daemon LuckPerms workers,
 four OkHttp threads, one daemon Okio watchdog, and a non-daemon OkHttp writer.
 Minecraft saved normally, but the writer retained the JVM until the launcher
 was interrupted. No server process remained afterward.
+
+## Phase 9.14 player command boundary and raw boot #14
+
+The Spigot 1.19.2 event has two constructors, a mutable player and slash-prefixed
+message, deprecated recipients, cancellation, and an independent static
+`HandlerList`. LuckPerms registers its handler with `ignoreCancelled=true` and
+passes the event player, message, and cancellable object to its common handler,
+which watches the `op`/`deop` command pattern when operator support is disabled.
+
+AtlasHybrid dispatches the event synchronously for any Minecraft command whose
+source entity is a `ServerPlayer`, before Brigadier execution. Bukkit commands,
+aliases, vanilla commands, and Forge commands share that point. Mutation
+replaces the current parse result once; cancellation cancels the Forge event.
+No network-thread dispatch, duplicate publication, Mixin, NMS hook, or
+LuckPerms-specific path was added. The full design is in
+[`PLAYER_COMMAND_EVENT_API.md`](../architecture/PLAYER_COMMAND_EVENT_API.md).
+
+Raw boot #14 crossed the player-command type and stopped at the final previously
+known declared event dependency in the same listener:
+
+| Item | Classification |
+|---|---|
+| Passed boundary | `PlayerCommandPreprocessEvent` links in `BukkitPlatformListener` |
+| New symbol/path | `LPBukkitPlugin.registerPlatformListeners:137` -> `PluginManager#registerEvents` -> `Class#getDeclaredMethods` -> `PluginEnableEvent` |
+| Diagnostic | `Missing API: org.bukkit.event.server.PluginEnableEvent`, `Status: NOT_IMPLEMENTED` |
+| Lifecycle phase | `BukkitLoaderPlugin.onEnable`, during platform-listener registration |
+| Public API? | Yes; synchronous, non-cancellable plugin lifecycle event |
+| LuckPerms use | Detect Vault by plugin name/provides and invoke `tryVaultHook(true)` |
+| Category | **CORE_API** |
+| Registration status | connection listener complete; platform listener, overall method, and `onEnable` incomplete |
+| Phase 9.14 action | Stop and document; defer lifecycle implementation to a later phase |
+
+The pre/post-stop counts were six daemon LuckPerms workers, four OkHttp threads,
+one daemon Okio watchdog, and one non-daemon OkHttp writer. Minecraft stopped
+and saved normally; the writer retained the JVM until the launcher was
+interrupted. No compatibility server process remained afterward.

@@ -66,3 +66,10 @@ execution, then may be cancelled or replaced. Player command preprocessing is
 not implemented by that bridge. The exact sender classification and mutation
 semantics are documented in
 [`SERVER_COMMAND_EVENT_API.md`](SERVER_COMMAND_EVENT_API.md).
+
+Player command preprocessing is likewise separate from registration and
+completion. Commands with a real Minecraft player source expose their leading
+slash through the synchronous event and may be cancelled or reparsed once after
+mutation. This applies to Bukkit, aliases, vanilla, and Forge commands rather
+than only `PluginCommand`. See
+[`PLAYER_COMMAND_EVENT_API.md`](PLAYER_COMMAND_EVENT_API.md).
