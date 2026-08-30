@@ -494,3 +494,39 @@ The post-stop dump observed eight parked daemon LuckPerms workers, daemon
 Okio/OkHttp support threads, and one non-daemon OkHttp writer. The Minecraft
 server stopped and saved normally, but the external writer retained the JVM
 until the launcher was interrupted.
+
+## Phase 9.13 server command boundary and raw boot #13
+
+The Spigot 1.19.2 audit confirms that `ServerCommandEvent` extends
+`ServerEvent`, is cancellable, and exposes a mutable command plus its sender.
+`RemoteServerCommandEvent` extends it but owns a distinct `HandlerList`. Exact
+LuckPerms bytecode declares handlers for local server commands, remote server
+commands, player command preprocessing, and plugin enable. The first three feed
+their mutable/cancellable command event into LuckPerms' common command handler;
+the plugin-enable handler conditionally integrates Vault.
+
+AtlasHybrid now dispatches local console and actual vanilla RCON sources through
+that contract using the existing event executor and Forge pre-execution command
+event. Mutation reparses once with the original Minecraft source; cancellation
+cancels execution. Player command sources are deliberately excluded. No new
+Mixin, NMS hook, CraftBukkit fake, or plugin-specific branch was added. See
+[`SERVER_COMMAND_EVENT_API.md`](../architecture/SERVER_COMMAND_EVENT_API.md).
+
+Raw boot #13 moved past both newly available classes and failed while reflecting
+the remaining declared methods of the same platform listener:
+
+| Item | Classification |
+|---|---|
+| Passed boundary | `ServerCommandEvent` and `RemoteServerCommandEvent` link in `BukkitPlatformListener` |
+| New symbol/path | `LPBukkitPlugin.registerPlatformListeners:137` -> `PluginManager#registerEvents` -> `Class#getDeclaredMethods` -> `PlayerCommandPreprocessEvent` |
+| Diagnostic | `Missing API: org.bukkit.event.player.PlayerCommandPreprocessEvent`, `Status: NOT_IMPLEMENTED` |
+| Lifecycle phase | `BukkitLoaderPlugin.onEnable`, during platform-listener registration |
+| Public API? | Yes; synchronous cancellable/mutable player-command event |
+| Category | **CORE_API** |
+| Registration status | connection listener complete; platform listener, overall method, and `onEnable` incomplete |
+| Phase 9.13 action | Stop and document; do not implement the next event or cascade to `PluginEnableEvent` |
+
+The pre-stop and post-stop dumps both showed seven daemon LuckPerms workers,
+four OkHttp threads, one daemon Okio watchdog, and a non-daemon OkHttp writer.
+Minecraft saved normally, but the writer retained the JVM until the launcher
+was interrupted. No server process remained afterward.

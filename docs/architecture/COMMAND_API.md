@@ -56,3 +56,13 @@ executor and completes its Brigadier future after the Bukkit callback finishes.
 
 A physical client tab-key check was not performed in this automated phase. The
 proof uses the production server dispatcher rather than a mocked command map.
+
+## Command dispatch versus command events
+
+Command registration, aliases, executor invocation, and tab completion remain
+the responsibilities described above. Pre-dispatch events are a separate
+bridge: local dedicated-server and vanilla RCON input are intercepted before
+execution, then may be cancelled or replaced. Player command preprocessing is
+not implemented by that bridge. The exact sender classification and mutation
+semantics are documented in
+[`SERVER_COMMAND_EVENT_API.md`](SERVER_COMMAND_EVENT_API.md).

@@ -47,6 +47,8 @@ import org.bukkit.event.player.AsyncPlayerPreLoginEvent;
 import org.bukkit.event.player.PlayerLoginEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.server.RemoteServerCommandEvent;
+import org.bukkit.event.server.ServerCommandEvent;
 
 @Mod(AtlasHybridMod.MOD_ID)
 public final class AtlasHybridMod {
@@ -237,6 +239,33 @@ public final class AtlasHybridMod {
     @SubscribeEvent
     public void onServerTick(TickEvent.ServerTickEvent event) {
         if (event.phase == TickEvent.Phase.END && scheduler != null) scheduler.tick();
+    }
+
+    @SubscribeEvent(priority = EventPriority.HIGHEST)
+    public void onServerCommand(net.minecraftforge.event.CommandEvent event) {
+        if (pluginManager == null || serverAdapter == null) return;
+        var parse = event.getParseResults();
+        CommandSourceStack source = parse.getContext().getSource();
+        boolean remote = source.source instanceof net.minecraft.server.rcon.RconConsoleSource;
+        boolean localConsole = source.source == source.getServer();
+        if (!remote && !localConsole) return;
+        if (!source.getServer().isSameThread()) {
+            throw new IllegalStateException("Server command events must execute on the Server thread");
+        }
+
+        String original = parse.getReader().getString();
+        ServerCommandEvent bridged = remote
+            ? new RemoteServerCommandEvent(ForgeCommandSender.of(source), original)
+            : new ServerCommandEvent(serverAdapter.getConsoleSender(), original);
+        pluginManager.callEvent(bridged);
+        if (bridged.isCancelled()) {
+            event.setCanceled(true);
+            return;
+        }
+        if (!java.util.Objects.equals(original, bridged.getCommand())) {
+            event.setParseResults(source.getServer().getCommands().getDispatcher()
+                .parse(bridged.getCommand(), source));
+        }
     }
 
     @SubscribeEvent

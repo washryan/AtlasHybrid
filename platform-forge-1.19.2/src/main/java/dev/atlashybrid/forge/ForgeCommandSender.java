@@ -10,7 +10,7 @@ import org.bukkit.permissions.PermissionAttachmentInfo;
 import org.bukkit.plugin.Plugin;
 import java.util.Set;
 
-final class ForgeCommandSender implements CommandSender {
+class ForgeCommandSender implements CommandSender {
     private final CommandSourceStack source;
     private final CommandSender permissions;
 
@@ -38,6 +38,10 @@ final class ForgeCommandSender implements CommandSender {
     static CommandSender of(CommandSourceStack source) {
         ForgeServerAdapter server = (ForgeServerAdapter) org.bukkit.Bukkit.getServer();
         if (source.getEntity() instanceof ServerPlayer player) return server.player(player);
+        if (source.source instanceof net.minecraft.server.rcon.RconConsoleSource) {
+            return new ForgeRemoteConsoleCommandSender(source, server.getConsoleSender());
+        }
+        if (source.source == source.getServer()) return server.getConsoleSender();
         return new ForgeCommandSender(source, server.getConsoleSender());
     }
 }

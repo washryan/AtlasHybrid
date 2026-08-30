@@ -31,6 +31,8 @@ import org.bukkit.event.HandlerList;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.AsyncPlayerPreLoginEvent;
 import org.bukkit.event.player.PlayerLoginEvent;
+import org.bukkit.event.server.RemoteServerCommandEvent;
+import org.bukkit.event.server.ServerCommandEvent;
 import org.bukkit.entity.Player;
 import org.bukkit.permissions.Permission;
 import org.bukkit.permissions.PermissionAttachment;
@@ -196,6 +198,46 @@ class EventApiTest {
                 && record.getMessage().contains("Status: EXECUTION_FAILED")));
     }
 
+    @Test
+    void serverCommandUsesPriorityMutationCancellationAndExceptionPolicy() {
+        List<String> order = new ArrayList<>();
+        CommandSender sender = new TestSender();
+        manager.registerEvent(ServerCommandEvent.class, new Listener() { }, EventPriority.LOWEST,
+            (registered, raw) -> {
+                ServerCommandEvent event = (ServerCommandEvent) raw;
+                order.add("lowest");
+                event.setCommand("say changed");
+            }, plugin);
+        manager.registerEvent(ServerCommandEvent.class, new NamedListener(), EventPriority.NORMAL,
+            (registered, event) -> { throw new EventException(new IllegalStateException("command boom")); }, plugin);
+        manager.registerEvent(ServerCommandEvent.class, new Listener() { }, EventPriority.MONITOR,
+            (registered, raw) -> {
+                order.add("monitor");
+                ((ServerCommandEvent) raw).setCancelled(true);
+            }, plugin);
+        ServerCommandEvent event = new ServerCommandEvent(sender, "say original");
+        manager.callEvent(event);
+        assertEquals(List.of("lowest", "monitor"), order);
+        assertEquals("say changed", event.getCommand());
+        assertTrue(event.isCancelled());
+        assertTrue(logs.records.stream().anyMatch(record ->
+            record.getMessage().contains("Event: ServerCommandEvent")
+                && record.getMessage().contains("Status: EXECUTION_FAILED")));
+    }
+
+    @Test
+    void remoteCommandHasIndependentHandlerListAndNoLocalDuplicate() {
+        AtomicInteger local = new AtomicInteger();
+        AtomicInteger remote = new AtomicInteger();
+        manager.registerEvent(ServerCommandEvent.class, new Listener() { }, EventPriority.NORMAL,
+            (registered, event) -> local.incrementAndGet(), plugin);
+        manager.registerEvent(RemoteServerCommandEvent.class, new Listener() { }, EventPriority.NORMAL,
+            (registered, event) -> remote.incrementAndGet(), plugin);
+        manager.callEvent(new RemoteServerCommandEvent(new TestSender(), "list"));
+        assertEquals(0, local.get());
+        assertEquals(1, remote.get());
+    }
+
     private void register(List<String> order, String value, EventPriority priority) {
         manager.registerEvent(TestEvent.class, new Listener() { }, priority,
             (registered, event) -> order.add(value), plugin);
@@ -225,6 +267,24 @@ class EventApiTest {
     }
 
     private static final class NamedListener implements Listener { }
+
+    private static final class TestSender implements CommandSender {
+        @Override public String getName() { return "test"; }
+        @Override public void sendMessage(String message) { }
+        @Override public boolean isOp() { return true; }
+        @Override public void setOp(boolean value) { }
+        @Override public boolean isPermissionSet(String permission) { return false; }
+        @Override public boolean isPermissionSet(Permission permission) { return false; }
+        @Override public boolean hasPermission(String permission) { return true; }
+        @Override public boolean hasPermission(Permission permission) { return true; }
+        @Override public PermissionAttachment addAttachment(Plugin plugin, String name, boolean value) { return null; }
+        @Override public PermissionAttachment addAttachment(Plugin plugin) { return null; }
+        @Override public PermissionAttachment addAttachment(Plugin plugin, String name, boolean value, int ticks) { return null; }
+        @Override public PermissionAttachment addAttachment(Plugin plugin, int ticks) { return null; }
+        @Override public void removeAttachment(PermissionAttachment attachment) { }
+        @Override public void recalculatePermissions() { }
+        @Override public Set<PermissionAttachmentInfo> getEffectivePermissions() { return Set.of(); }
+    }
 
     private static final class AnnotatedListener implements Listener {
         private int calls;

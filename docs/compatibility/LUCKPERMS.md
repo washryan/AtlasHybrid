@@ -558,3 +558,49 @@ daemon `luckperms-worker-*` threads, daemon Okio/OkHttp threads, and the
 non-daemon `OkHttp metadata.luckperms.net Writer`; the latter kept the launcher
 alive, so it was interrupted after the server had stopped. LuckPerms remains
 **BLOCKED** and unsupported.
+
+## Phase 9.13 raw boot #13
+
+Phase 9.13 implements the exact public `ServerCommandEvent` and
+`RemoteServerCommandEvent` contracts. The production bridge uses Forge's
+pre-execution command event: local console input receives the stable AtlasHybrid
+console sender, real vanilla RCON input receives a remote-console sender,
+mutation replaces the parse result, and cancellation prevents execution. The
+dedicated-server proof exercised both paths and emitted
+`SERVER_COMMAND_EVENT_OK` and `REMOTE_SERVER_COMMAND_EVENT_OK` exactly once.
+
+The unchanged LuckPerms artifact no longer fails on either server command event
+type. Reflection of the same `BukkitPlatformListener` then stopped at the next
+declared handler type:
+
+```text
+[AtlasHybrid Compatibility]
+Plugin: LuckPerms
+Missing API: org.bukkit.event.player.PlayerCommandPreprocessEvent
+Status: NOT_IMPLEMENTED
+Runtime: 0.1.0-alpha
+
+java.lang.NoClassDefFoundError:
+org/bukkit/event/player/PlayerCommandPreprocessEvent
+    at java.lang.Class.getDeclaredMethods0(Native Method)
+    at dev.atlashybrid.runtime.event.AtlasPluginManager.registerEvents(AtlasPluginManager.java:57)
+    at me.lucko.luckperms.bukkit.LPBukkitPlugin.registerPlatformListeners(LPBukkitPlugin.java:137)
+```
+
+Classification: **CORE_API**. This is Bukkit's synchronous, cancellable,
+mutable player-command preprocessing event. It was audited but is outside the
+server/RCON event implementation and was not added after the stop gate.
+`BukkitConnectionListener` registration still passes; registration of
+`BukkitPlatformListener`, the overall `registerPlatformListeners` method, and
+LuckPerms `onEnable` remain incomplete. `LUCKPERMS_PLATFORM_LISTENERS_REGISTERED`
+and `LUCKPERMS_ENABLE_REACHED` were therefore not recorded.
+
+Before stop, the dump contained seven daemon `luckperms-worker-*` threads, four
+OkHttp threads, one daemon Okio watchdog, and one non-daemon
+`OkHttp metadata.luckperms.net Writer`. Normal `stop` saved all dimensions, but
+those same threads remained and the writer retained the JVM. The launcher was
+interrupted only after Minecraft had stopped; afterward no compatibility Java
+process remained. The regression suite passed `106/106`, integration and the
+WelcomeMessage/WarpPlugin probes passed, and both clean builds produced
+byte-identical runtime, test-plugin and test-mod JARs. LuckPerms remains
+**BLOCKED** and unsupported.

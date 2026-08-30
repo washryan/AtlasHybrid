@@ -24,6 +24,8 @@ import org.bukkit.event.player.AsyncPlayerPreLoginEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerLoginEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.server.RemoteServerCommandEvent;
+import org.bukkit.event.server.ServerCommandEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.permissions.Permission;
 import org.bukkit.permissions.PermissionAttachment;
@@ -35,6 +37,8 @@ public final class AtlasHybridTestPlugin extends JavaPlugin implements Listener,
     private org.bukkit.entity.Player sessionPlayer;
     private final java.util.concurrent.ConcurrentMap<String, java.util.List<String>> loginOrder =
         new java.util.concurrent.ConcurrentHashMap<>();
+    private final java.util.concurrent.atomic.AtomicInteger localServerCommands = new java.util.concurrent.atomic.AtomicInteger();
+    private final java.util.concurrent.atomic.AtomicInteger remoteServerCommands = new java.util.concurrent.atomic.AtomicInteger();
 
     @Override
     public void onLoad() {
@@ -108,6 +112,30 @@ public final class AtlasHybridTestPlugin extends JavaPlugin implements Listener,
             boolean value = sender.hasPermission(args[1]);
             sender.sendMessage("Permission " + args[1] + ": " + value);
             return value;
+        }
+        if (args.length == 1 && "server-original".equals(args[0])) {
+            throw new IllegalStateException("Original local server command executed after mutation");
+        }
+        if (args.length == 1 && "server-mutated".equals(args[0])) {
+            if (localServerCommands.get() != 1 || sender != getServer().getConsoleSender()) {
+                throw new IllegalStateException("Mutated local server command sender/count mismatch");
+            }
+            sender.sendMessage("local server mutation executed");
+            return true;
+        }
+        if (args.length == 1 && "server-cancelled".equals(args[0])) {
+            throw new IllegalStateException("Cancelled local server command executed");
+        }
+        if (args.length == 1 && "remote-original".equals(args[0])) {
+            throw new IllegalStateException("Original remote server command executed after mutation");
+        }
+        if (args.length == 1 && "remote-mutated".equals(args[0])) {
+            if (remoteServerCommands.get() != 1
+                || !(sender instanceof org.bukkit.command.RemoteConsoleCommandSender)) {
+                throw new IllegalStateException("Mutated remote server command sender/count mismatch");
+            }
+            sender.sendMessage("remote server mutation executed");
+            return true;
         }
         sender.sendMessage("Usage: /atlas [info|permission <node>]; got " + Arrays.toString(args));
         return false;
@@ -225,6 +253,41 @@ public final class AtlasHybridTestPlugin extends JavaPlugin implements Listener,
             event.setCancelled(true);
             getLogger().info("[AtlasHybridTestPlugin] BlockBreakEvent cancelled by config");
         }
+    }
+
+    @EventHandler(priority = EventPriority.LOWEST)
+    public void onServerCommand(ServerCommandEvent event) {
+        if (event instanceof RemoteServerCommandEvent) {
+            throw new IllegalStateException("Remote command dispatched through local ServerCommandEvent handlers");
+        }
+        if (!event.getCommand().equals("atlas server-original")
+            && !event.getCommand().equals("atlas server-cancelled")) return;
+        if (event.getSender() != getServer().getConsoleSender()
+            || !Thread.currentThread().getName().equals("Server thread")) {
+            throw new IllegalStateException("Local ServerCommandEvent sender/thread mismatch");
+        }
+        int calls = localServerCommands.incrementAndGet();
+        if (calls > 2) throw new IllegalStateException("Duplicate local ServerCommandEvent dispatch");
+        if (event.getCommand().equals("atlas server-original")) {
+            if (calls != 1) throw new IllegalStateException("Local mutation command order mismatch");
+            event.setCommand("atlas server-mutated");
+        } else {
+            if (calls != 2) throw new IllegalStateException("Local cancellation command order mismatch");
+            event.setCancelled(true);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.LOWEST)
+    public void onRemoteServerCommand(RemoteServerCommandEvent event) {
+        if (!event.getCommand().equals("atlas remote-original")) return;
+        if (!(event.getSender() instanceof org.bukkit.command.RemoteConsoleCommandSender)
+            || !Thread.currentThread().getName().equals("Server thread")) {
+            throw new IllegalStateException("RemoteServerCommandEvent sender/thread mismatch");
+        }
+        if (remoteServerCommands.incrementAndGet() != 1) {
+            throw new IllegalStateException("Duplicate RemoteServerCommandEvent dispatch");
+        }
+        event.setCommand("atlas remote-mutated");
     }
 
     private void registerPermissionProof() {

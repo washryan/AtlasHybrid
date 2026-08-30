@@ -62,13 +62,15 @@ public final class AtlasHybridTestMod {
             probeRan = true;
             LoginProofResult login = loginProof.join();
             if (!login.preLoginDenied() || !login.loginDenied() || !login.allowed()
-                || !login.joinObserved() || !login.quitCleanupObserved() || !login.vanillaGateAllowed()) {
+                || !login.joinObserved() || !login.quitCleanupObserved() || !login.vanillaGateAllowed()
+                || !login.remoteCommandEvent()) {
                 throw new IllegalStateException("Real login proof failed: " + login);
             }
             LOGGER.info("[AtlasHybridIntegration] ASYNC_PRELOGIN_OK");
             LOGGER.info("[AtlasHybridIntegration] PRELOGIN_DENY_OK");
             LOGGER.info("[AtlasHybridIntegration] PLAYER_LOGIN_HOOK_OK");
             LOGGER.info("[AtlasHybridIntegration] PLAYER_LOGIN_DENY_OK");
+            LOGGER.info("[AtlasHybridIntegration] REMOTE_SERVER_COMMAND_EVENT_OK");
             runProbe();
         }
         if (ticks >= 300 && !probeRan) {
@@ -92,6 +94,7 @@ public final class AtlasHybridTestMod {
                 && absentFromMinecraftAndBukkit("AtlasLoginDenied");
             LoginResponse vanillaGate = loginAndHold("AtlasVanillaGate");
             LoginResponse allowed = loginAndHold("AtlasAllowed");
+            boolean remoteCommandEvent = runRconCommandProof();
             return new LoginProofResult(
                 denied.packetId() == 0
                     && (denied.payload().contains("AtlasHybrid integration deny")
@@ -103,7 +106,8 @@ public final class AtlasHybridTestMod {
                 allowed.packetId() == 2,
                 allowed.joinObserved(),
                 allowed.quitCleanupObserved(),
-                vanillaGate.packetId() == 2 && vanillaGate.joinObserved() && vanillaGate.quitCleanupObserved()
+                vanillaGate.packetId() == 2 && vanillaGate.joinObserved() && vanillaGate.quitCleanupObserved(),
+                remoteCommandEvent
             );
         } catch (IOException exception) {
             throw new IllegalStateException("Real Minecraft login probe failed", exception);
@@ -262,7 +266,51 @@ public final class AtlasHybridTestMod {
     private record LoginResponse(int packetId, String payload, boolean joinObserved, boolean quitCleanupObserved) { }
 
     private record LoginProofResult(boolean preLoginDenied, boolean loginDenied, boolean allowed,
-                                    boolean joinObserved, boolean quitCleanupObserved, boolean vanillaGateAllowed) { }
+                                    boolean joinObserved, boolean quitCleanupObserved, boolean vanillaGateAllowed,
+                                    boolean remoteCommandEvent) { }
+
+    private boolean runRconCommandProof() throws IOException {
+        try (Socket socket = new Socket(InetAddress.getLoopbackAddress(), 25575)) {
+            socket.setSoTimeout(10_000);
+            DataOutputStream output = new DataOutputStream(socket.getOutputStream());
+            DataInputStream input = new DataInputStream(socket.getInputStream());
+            writeRconPacket(output, 912, 3, "atlas-integration");
+            RconPacket auth = readRconPacket(input);
+            if (auth.id() != 912 || auth.type() != 2) return false;
+            writeRconPacket(output, 913, 2, "atlas remote-original");
+            RconPacket response = readRconPacket(input);
+            return response.id() == 913 && response.type() == 0
+                && response.payload().contains("remote server mutation executed");
+        }
+    }
+
+    private static void writeRconPacket(DataOutputStream output, int id, int type, String payload) throws IOException {
+        byte[] value = payload.getBytes(StandardCharsets.UTF_8);
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream(value.length + 14);
+        DataOutputStream packet = new DataOutputStream(bytes);
+        packet.writeInt(Integer.reverseBytes(value.length + 10));
+        packet.writeInt(Integer.reverseBytes(id));
+        packet.writeInt(Integer.reverseBytes(type));
+        packet.write(value);
+        packet.writeByte(0);
+        packet.writeByte(0);
+        output.write(bytes.toByteArray());
+        output.flush();
+    }
+
+    private static RconPacket readRconPacket(DataInputStream input) throws IOException {
+        int length = Integer.reverseBytes(input.readInt());
+        if (length < 10 || length > 4096) throw new IOException("Invalid RCON packet length: " + length);
+        int id = Integer.reverseBytes(input.readInt());
+        int type = Integer.reverseBytes(input.readInt());
+        byte[] payload = input.readNBytes(length - 10);
+        if (payload.length != length - 10 || input.readUnsignedByte() != 0 || input.readUnsignedByte() != 0) {
+            throw new EOFException("Incomplete RCON packet");
+        }
+        return new RconPacket(id, type, new String(payload, StandardCharsets.UTF_8));
+    }
+
+    private record RconPacket(int id, int type, String payload) { }
 
     private void runProbe() {
         LOGGER.info("[AtlasHybridIntegration] PROBE_START");
@@ -271,6 +319,10 @@ public final class AtlasHybridTestMod {
         int infoResult = server.getCommands().performCommand(server.getCommands().getDispatcher().parse("atlas info", source), "atlas info");
         int permissionResult = server.getCommands().performCommand(server.getCommands().getDispatcher().parse("atlas permission atlas.test.provider", source), "atlas permission atlas.test.provider");
         LOGGER.info("[AtlasHybridIntegration] COMMAND_RESULTS atlas={} info={} permission={}", atlasResult, infoResult, permissionResult);
+        int localMutation = server.getCommands().performPrefixedCommand(source, "atlas server-original");
+        server.getCommands().performPrefixedCommand(source, "atlas server-cancelled");
+        if (localMutation != 1) throw new IllegalStateException("Local server command mutation did not execute");
+        LOGGER.info("[AtlasHybridIntegration] SERVER_COMMAND_EVENT_OK");
 
         ServerLevel level = server.overworld();
         FakePlayer player = FakePlayerFactory.getMinecraft(level);
