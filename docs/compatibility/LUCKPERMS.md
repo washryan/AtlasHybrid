@@ -749,3 +749,46 @@ The suite passed `114/114`; integration, WelcomeMessage and WarpPlugin passed;
 `ENTITY_API_OK` appeared exactly once; and two clean builds produced
 byte-identical runtime, test-plugin and test-mod JARs. LuckPerms remains
 **BLOCKED** and unsupported.
+
+## Phase 9.17 raw boot #17
+
+Phase 9.17 adds the exact Bukkit 1.19.2 `GameMode` enum contract and a
+thread-safe snapshot of each real Minecraft player's `GameType`. Mapping is an
+explicit switch, not an ordinal conversion; all four modes were exercised on a
+real `ServerPlayer`. The setter and the wider player-context surface remain
+deferred. See [`GAMEMODE_API.md`](../architecture/GAMEMODE_API.md).
+
+The unchanged LuckPerms artifact crossed the former `GameMode` boundary and
+entered `BukkitPlayerCalculator` initialization. Raw boot #17 then stopped at
+the next public context type:
+
+```text
+[AtlasHybrid Compatibility]
+Plugin: LuckPerms
+Missing API: org.bukkit.World$Environment
+Status: NOT_IMPLEMENTED
+Runtime: 0.1.0-alpha
+
+java.lang.NoClassDefFoundError: org/bukkit/World$Environment
+    at me.lucko.luckperms.bukkit.LPBukkitPlugin.setupContextManager(LPBukkitPlugin.java:189)
+    at me.lucko.luckperms.common.plugin.AbstractLuckPermsPlugin.enable(AbstractLuckPermsPlugin.java:233)
+```
+
+This is a new **CORE_API** boundary. LuckPerms uses the enum together with
+`World#getEnvironment()` when building player contexts. No world-environment
+stub, change-event cascade, CraftBukkit facade or plugin-specific workaround
+was added. LuckPerms `onEnable` remains incomplete and
+`LUCKPERMS_ENABLE_REACHED` was not recorded. WarpPlugin and WelcomeMessage still
+enabled normally after the failed-enable rollback.
+
+Before stop, the JVM had eight daemon `luckperms-worker-*` threads, four OkHttp
+threads, one daemon Okio watchdog and one daemon H2 MVStore writer. Normal
+Minecraft stop saved every dimension. After stop, seven workers, three OkHttp
+threads and the H2 writer remained; the watchdog exited. The non-daemon OkHttp
+metadata writer retained the JVM, so the launcher was interrupted only after
+Minecraft shutdown; no server process remained.
+
+The suite passed `116/116`; integration, WelcomeMessage and WarpPlugin passed;
+`GAMEMODE_API_OK` appeared exactly once; and two clean builds produced
+byte-identical runtime, test-plugin and test-mod JARs. LuckPerms remains
+**BLOCKED** and unsupported.

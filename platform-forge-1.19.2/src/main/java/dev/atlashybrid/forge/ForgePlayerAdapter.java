@@ -10,6 +10,8 @@ import java.util.Set;
 import java.util.UUID;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.level.GameType;
+import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.entity.Player;
@@ -22,9 +24,11 @@ import org.bukkit.plugin.Plugin;
 final class ForgePlayerAdapter implements Player, AutoCloseable {
     private final ServerPlayer player;
     private final AtlasPermissible permissions;
+    private volatile GameMode gameModeSnapshot;
 
     ForgePlayerAdapter(ServerPlayer player, AtlasPermissionRegistry registry, PermissionProviderRegistry providers) {
         this.player = player;
+        this.gameModeSnapshot = ForgeGameModeMapper.toBukkit(player.gameMode.getGameModeForPlayer());
         ServerOperator operator = new ServerOperator() {
             @Override public boolean isOp() { return player.hasPermissions(2); }
             @Override public void setOp(boolean value) {
@@ -40,6 +44,7 @@ final class ForgePlayerAdapter implements Player, AutoCloseable {
     net.minecraft.commands.CommandSourceStack commandSource() { return player.createCommandSourceStack(); }
 
     @Override public UUID getUniqueId() { return player.getUUID(); }
+    @Override public GameMode getGameMode() { return gameModeSnapshot; }
     @Override public int getEntityId() { return player.getId(); }
     @Override public World getWorld() {
         return ((ForgeServerAdapter) org.bukkit.Bukkit.getServer()).world(player.getLevel());
@@ -76,5 +81,6 @@ final class ForgePlayerAdapter implements Player, AutoCloseable {
     @Override public void removeAttachment(PermissionAttachment attachment) { permissions.removeAttachment(attachment); }
     @Override public void recalculatePermissions() { permissions.recalculatePermissions(); }
     @Override public Set<PermissionAttachmentInfo> getEffectivePermissions() { return permissions.getEffectivePermissions(); }
+    void updateGameMode(GameType type) { gameModeSnapshot = ForgeGameModeMapper.toBukkit(type); }
     @Override public void close() { permissions.close(); }
 }

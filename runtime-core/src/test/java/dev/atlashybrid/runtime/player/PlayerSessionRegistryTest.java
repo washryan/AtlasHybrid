@@ -184,6 +184,7 @@ class PlayerSessionRegistryTest {
         }
 
         @Override public UUID getUniqueId() { return id; }
+        @Override public org.bukkit.GameMode getGameMode() { return org.bukkit.GameMode.SURVIVAL; }
         @Override public int getEntityId() { return id.hashCode(); }
         @Override public World getWorld() { return world; }
         @Override public String getDisplayName() { return name; }

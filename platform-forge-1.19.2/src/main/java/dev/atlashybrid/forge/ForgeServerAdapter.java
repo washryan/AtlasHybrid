@@ -103,6 +103,14 @@ final class ForgeServerAdapter implements Server {
         players.remove(player.getUUID());
     }
 
+    void updateGameMode(net.minecraft.server.level.ServerPlayer player, net.minecraft.world.level.GameType type) {
+        ForgePlayerAdapter adapter = (ForgePlayerAdapter) players.getPlayer(player.getUUID());
+        if (adapter == null && players.isConnecting(player.getUUID())) {
+            adapter = connectingPlayer(player);
+        }
+        if (adapter != null) adapter.updateGameMode(type);
+    }
+
     private ForgePlayerAdapter createPlayer(net.minecraft.server.level.ServerPlayer player) {
         ForgePlayerAdapter adapter = new ForgePlayerAdapter(player, permissions, providers);
         adapter.initializePermissions();

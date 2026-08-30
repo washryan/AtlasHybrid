@@ -339,6 +339,13 @@ public final class AtlasHybridMod {
         }
     }
 
+    @SubscribeEvent(priority = EventPriority.LOWEST)
+    public void onPlayerGameModeChange(PlayerEvent.PlayerChangeGameModeEvent event) {
+        if (serverAdapter != null && !event.isCanceled() && event.getEntity() instanceof ServerPlayer player) {
+            serverAdapter.updateGameMode(player, event.getNewGameMode());
+        }
+    }
+
     @SubscribeEvent(priority = EventPriority.LOWEST, receiveCanceled = true)
     public void onBlockBreak(BlockEvent.BreakEvent event) {
         if (pluginManager == null || !(event.getPlayer() instanceof ServerPlayer player)) return;

@@ -375,6 +375,14 @@ public final class AtlasHybridTestMod {
             throw new IllegalStateException("Player Entity adapter coherence failed");
         }
         LOGGER.info("[AtlasHybridIntegration] ENTITY_API_OK");
+        if (onlinePlayer.getGameMode() != org.bukkit.GameMode.SURVIVAL) {
+            throw new IllegalStateException("Expected real survival mode");
+        }
+        assertGameMode(player, onlinePlayer, GameType.CREATIVE, org.bukkit.GameMode.CREATIVE);
+        assertGameMode(player, onlinePlayer, GameType.ADVENTURE, org.bukkit.GameMode.ADVENTURE);
+        assertGameMode(player, onlinePlayer, GameType.SPECTATOR, org.bukkit.GameMode.SPECTATOR);
+        assertGameMode(player, onlinePlayer, GameType.SURVIVAL, org.bukkit.GameMode.SURVIVAL);
+        LOGGER.info("[AtlasHybridIntegration] GAMEMODE_API_OK");
         int playerMutation = server.getCommands().performPrefixedCommand(
             player.createCommandSourceStack(), "atlas player-original");
         server.getCommands().performPrefixedCommand(
@@ -425,6 +433,16 @@ public final class AtlasHybridTestMod {
 
     private int perform(String command, net.minecraft.commands.CommandSourceStack source) {
         return server.getCommands().performCommand(server.getCommands().getDispatcher().parse(command, source), command);
+    }
+
+    private static void assertGameMode(FakePlayer minecraftPlayer, org.bukkit.entity.Player bukkitPlayer,
+                                       GameType minecraftMode, org.bukkit.GameMode bukkitMode) {
+        if (!minecraftPlayer.setGameMode(minecraftMode)
+            || minecraftPlayer.gameMode.getGameModeForPlayer() != minecraftMode
+            || bukkitPlayer.getGameMode() != bukkitMode) {
+            throw new IllegalStateException("Game mode bridge mismatch: Minecraft=" + minecraftMode
+                + " Bukkit=" + bukkitPlayer.getGameMode());
+        }
     }
 
     private List<String> suggestions(String command, net.minecraft.commands.CommandSourceStack source) {

@@ -630,3 +630,42 @@ workers, three OkHttp threads and the H2 writer remained; Okio exited. The
 non-daemon OkHttp writer retained the JVM until the launcher was interrupted.
 No process remained. The regression suite passed `114/114`, integration and
 both external plugin proofs passed, and both clean builds were byte-identical.
+
+## Phase 9.17 game-mode context and raw boot #17
+
+The Spigot 1.19.2 `GameMode` binary contract declares `CREATIVE`, `SURVIVAL`,
+`ADVENTURE`, `SPECTATOR` with legacy values `1`, `0`, `2`, `3`. LuckPerms'
+`BukkitPlayerCalculator` consumes the class, all enum values and
+`Player#getGameMode()`. Its broader exact context surface also consumes
+`Player#getWorld()`, `World#getName()`, `World#getEnvironment()`,
+`World.Environment`, `Server#getWorlds()`, and join/world-change/game-mode-change
+events. It does not consume locale, network address, inventory, metadata or
+persistent-data APIs.
+
+AtlasHybrid maps all four Minecraft `GameType` values explicitly and exposes a
+volatile per-session snapshot because LuckPerms context recalculation is not
+confined to the server thread. The snapshot starts from the real connecting
+player, follows real server-thread game-mode changes, survives promotion of the
+same adapter and becomes a stable last value after disconnect. No ordinal
+mapping or synthetic parallel game-mode state is used.
+
+| Item | Classification |
+|---|---|
+| Passed boundary | `GameMode.class`, `GameMode.values()` and `Player#getGameMode()` link in `BukkitPlayerCalculator` |
+| Verified mapping | Minecraft Survival/Creative/Adventure/Spectator map explicitly to their Bukkit counterparts |
+| New symbol/path | `AbstractLuckPermsPlugin.enable:233` -> `LPBukkitPlugin.setupContextManager:189` -> initialize `BukkitPlayerCalculator` -> `org.bukkit.World$Environment` |
+| Diagnostic | `Missing API: org.bukkit.World$Environment`, `Status: NOT_IMPLEMENTED` |
+| Public API? | Yes; Bukkit world-dimension classification enum |
+| Exact LuckPerms use | enumerate environments and read each player's `World#getEnvironment()` for context keys |
+| Category | **CORE_API** |
+| CraftBukkit/NMS? | No for this symbol; known later permissible injection remains architectural |
+| LuckPerms enable | incomplete; `LUCKPERMS_ENABLE_REACHED` absent |
+| Phase 9.17 action | stop and document; no world/event cascade |
+
+The pre-stop dump contained eight daemon LuckPerms workers, four OkHttp
+threads, one daemon Okio watchdog and one daemon H2 writer. After normal world
+saving, seven workers, three OkHttp threads and the H2 writer remained; the
+non-daemon OkHttp metadata writer retained the JVM. The launcher was
+interrupted after shutdown and no Forge server process remained. Regression
+was `116/116`, all integration/external-plugin proofs passed, and both clean
+builds were byte-identical.

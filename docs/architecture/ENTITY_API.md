@@ -73,3 +73,7 @@ same adapter lookup, duplicate prevention and cleanup. The dedicated-server
 proof uses a connected runtime player and emits `ENTITY_API_OK` exactly once.
 It also verifies that the entity ID is Minecraft's real ID and that the World
 object used by Entity and Location is identical.
+
+Phase 9.17 extends the connected `HumanEntity`/`Player` boundary with the real
+game-mode getter. See [`GAMEMODE_API.md`](GAMEMODE_API.md) for its mapping and
+thread-safety contract.
