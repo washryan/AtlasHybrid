@@ -174,7 +174,10 @@ class PlayerSessionRegistryTest {
     private static final class FakePlayer implements Player {
         private final UUID id;
         private final String name;
-        private final World world = () -> "world";
+        private final World world = new World() {
+            @Override public String getName() { return "world"; }
+            @Override public Environment getEnvironment() { return Environment.NORMAL; }
+        };
         private boolean permission;
         private boolean closed;
 

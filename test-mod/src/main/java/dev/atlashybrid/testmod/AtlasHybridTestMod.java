@@ -383,6 +383,8 @@ public final class AtlasHybridTestMod {
         assertGameMode(player, onlinePlayer, GameType.SPECTATOR, org.bukkit.GameMode.SPECTATOR);
         assertGameMode(player, onlinePlayer, GameType.SURVIVAL, org.bukkit.GameMode.SURVIVAL);
         LOGGER.info("[AtlasHybridIntegration] GAMEMODE_API_OK");
+        assertWorldEnvironment(onlinePlayer);
+        LOGGER.info("[AtlasHybridIntegration] WORLD_ENVIRONMENT_OK");
         int playerMutation = server.getCommands().performPrefixedCommand(
             player.createCommandSourceStack(), "atlas player-original");
         server.getCommands().performPrefixedCommand(
@@ -442,6 +444,22 @@ public final class AtlasHybridTestMod {
             || bukkitPlayer.getGameMode() != bukkitMode) {
             throw new IllegalStateException("Game mode bridge mismatch: Minecraft=" + minecraftMode
                 + " Bukkit=" + bukkitPlayer.getGameMode());
+        }
+    }
+
+    private static void assertWorldEnvironment(org.bukkit.entity.Player player) {
+        org.bukkit.World overworld = player.getWorld();
+        String rootName = overworld.getName();
+        org.bukkit.World nether = org.bukkit.Bukkit.getWorld(rootName + "_nether");
+        org.bukkit.World end = org.bukkit.Bukkit.getWorld(rootName + "_the_end");
+        if (overworld.getEnvironment() != org.bukkit.World.Environment.NORMAL
+            || org.bukkit.Bukkit.getWorld(rootName) != overworld
+            || player.getLocation().getWorld() != overworld
+            || nether == null || nether.getEnvironment() != org.bukkit.World.Environment.NETHER
+            || end == null || end.getEnvironment() != org.bukkit.World.Environment.THE_END
+            || org.bukkit.Bukkit.getWorld(rootName + "_nether") != nether
+            || org.bukkit.Bukkit.getWorld(rootName + "_the_end") != end) {
+            throw new IllegalStateException("World environment or adapter coherence failed");
         }
     }
 

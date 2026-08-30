@@ -7,10 +7,12 @@ import org.bukkit.World;
 final class ForgeWorldAdapter implements World {
     private final ServerLevel level;
     private final String name;
+    private final Environment environment;
 
     ForgeWorldAdapter(ServerLevel level, String name) {
         this.level = Objects.requireNonNull(level, "level");
         this.name = Objects.requireNonNull(name, "name");
+        this.environment = ForgeWorldEnvironmentMapper.toBukkit(level.dimension().location());
     }
 
     ServerLevel level() {
@@ -20,6 +22,11 @@ final class ForgeWorldAdapter implements World {
     @Override
     public String getName() {
         return name;
+    }
+
+    @Override
+    public Environment getEnvironment() {
+        return environment;
     }
 
     @Override

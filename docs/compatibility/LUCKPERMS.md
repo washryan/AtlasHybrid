@@ -792,3 +792,50 @@ The suite passed `116/116`; integration, WelcomeMessage and WarpPlugin passed;
 `GAMEMODE_API_OK` appeared exactly once; and two clean builds produced
 byte-identical runtime, test-plugin and test-mod JARs. LuckPerms remains
 **BLOCKED** and unsupported.
+
+## Phase 9.18 raw boot #18
+
+Phase 9.18 adds the exact Bukkit 1.19.2 `World.Environment` enum, including
+`CUSTOM`, and exposes each stable World adapter's environment from its real
+namespaced dimension key. Vanilla Overworld, Nether and End map explicitly;
+every other Forge dimension maps to `CUSTOM`. Name and environment are
+immutable adapter context while `Player#getWorld()` resolves the player's
+current live level. See
+[`WORLD_ENVIRONMENT_API.md`](../architecture/WORLD_ENVIRONMENT_API.md).
+
+The unchanged LuckPerms artifact crossed the former environment boundary and
+advanced one line further into `setupContextManager`, where listener reflection
+for the now-constructible `BukkitPlayerCalculator` stopped at:
+
+```text
+[AtlasHybrid Compatibility]
+Plugin: LuckPerms
+Missing API: org.bukkit.event.player.PlayerChangedWorldEvent
+Status: NOT_IMPLEMENTED
+Runtime: 0.1.0-alpha
+
+java.lang.NoClassDefFoundError: org/bukkit/event/player/PlayerChangedWorldEvent
+    at java.lang.Class.getDeclaredMethods0(Native Method)
+    at dev.atlashybrid.runtime.event.AtlasPluginManager.registerEvents(AtlasPluginManager.java:57)
+    at me.lucko.luckperms.bukkit.LPBukkitPlugin.setupContextManager(LPBukkitPlugin.java:190)
+```
+
+This is the synchronous Bukkit world-transition invalidation event and a new
+**CORE_API** boundary. No event stub, dimension-transition hook,
+`Server#getWorlds()` cascade or plugin-specific workaround was added. Command
+registration remained complete and H2 initialized before the failure, but the
+partial enable did not shut all resources down. LuckPerms `onEnable` remains
+incomplete and `LUCKPERMS_ENABLE_REACHED` was not recorded. WarpPlugin and
+WelcomeMessage enabled normally after rollback.
+
+Before stop, the JVM had eight daemon `luckperms-worker-*` threads, four OkHttp
+threads, one daemon Okio watchdog and one daemon H2 MVStore writer. Normal
+Minecraft stop saved every dimension. After stop, seven workers, three OkHttp
+threads, the Okio watchdog and the H2 writer remained. The non-daemon OkHttp
+metadata writer retained the JVM, so the launcher was interrupted only after
+Minecraft shutdown; no server process remained.
+
+The suite passed `118/118`; integration, WelcomeMessage and WarpPlugin passed;
+`WORLD_ENVIRONMENT_OK` appeared exactly once; and two clean builds produced
+byte-identical runtime, test-plugin and test-mod JARs. LuckPerms remains
+**BLOCKED** and unsupported.

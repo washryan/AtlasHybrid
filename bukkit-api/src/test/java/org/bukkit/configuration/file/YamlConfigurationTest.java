@@ -115,7 +115,10 @@ class YamlConfigurationTest {
 
     @Test
     void persistsMutableStringListsAndTypedLocations() {
-        World world = () -> "world";
+        World world = new World() {
+            @Override public String getName() { return "world"; }
+            @Override public Environment getEnvironment() { return Environment.NORMAL; }
+        };
         Bukkit.setServer(new ConfigServer(world));
         try {
             Path path = temp.resolve("config.yml");

@@ -669,3 +669,42 @@ non-daemon OkHttp metadata writer retained the JVM. The launcher was
 interrupted after shutdown and no Forge server process remained. Regression
 was `116/116`, all integration/external-plugin proofs passed, and both clean
 builds were byte-identical.
+
+## Phase 9.18 world environment and raw boot #18
+
+The audited Spigot contract declares `NORMAL(0)`, `NETHER(-1)`, `THE_END(1)`
+and `CUSTOM(-999)` in that order. It exposes deprecated `getId()` and
+`getEnvironment(int)`, whose unknown result is `null`. AtlasHybrid maps the
+real Minecraft dimension-key location explicitly: the three vanilla keys map
+to their corresponding environments and all modded keys map to `CUSTOM`.
+
+`BukkitPlayerCalculator#calculate` reads `Player#getWorld()`, then
+`World#getEnvironment()` and `World#getName()`. It emits `dimension-type` as
+`overworld`, `the_nether`, `the_end`, or the lower-case enum fallback, and
+rewrites/submits the world name. `estimatePotentialContexts` additionally uses
+`Environment.values()` and `Server#getWorlds()`. Its invalidation listeners
+reference `PlayerJoinEvent`, `PlayerChangedWorldEvent` and
+`PlayerGameModeChangeEvent`. It does not use World UUID, player location,
+locale, address, client version, inventory, metadata or persistent data.
+
+| Item | Classification |
+|---|---|
+| Passed boundary | `World.Environment`, its constants/values, and `World#getEnvironment()` link |
+| Runtime mapping | Overworld=`NORMAL`, Nether=`NETHER`, End=`THE_END`, other dimension keys=`CUSTOM` |
+| Existing context | stable World adapter and real `World#getName()` remain available |
+| New symbol/path | `LPBukkitPlugin.setupContextManager:190` -> `PluginManager#registerEvents` -> `Class#getDeclaredMethods` -> `PlayerChangedWorldEvent` |
+| Diagnostic | `Missing API: org.bukkit.event.player.PlayerChangedWorldEvent`, `Status: NOT_IMPLEMENTED` |
+| Exact use | LOWEST listener signals a LuckPerms context refresh after a player changes worlds |
+| Category | **CORE_API** |
+| CraftBukkit/NMS? | The public event type does not require CraftBukkit; a correct real transition dispatch needs a separately audited Forge/Minecraft bridge |
+| Still missing later | `PlayerGameModeChangeEvent`, `Server#getWorlds()` |
+| LuckPerms enable | incomplete; `LUCKPERMS_ENABLE_REACHED` absent |
+| Phase 9.18 action | stop and document; no event or World API cascade |
+
+Pre-stop resources were eight daemon LuckPerms workers, four OkHttp threads,
+one daemon Okio watchdog and one daemon H2 writer. After normal world-saving
+shutdown, seven workers, three OkHttp threads, the watchdog and H2 writer
+remained. The non-daemon OkHttp metadata writer retained the JVM until the
+launcher was interrupted. No Forge server process remained. Regression was
+`118/118`, all integration/external-plugin proofs passed, and both clean builds
+were byte-identical.

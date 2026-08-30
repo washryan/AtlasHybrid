@@ -77,3 +77,7 @@ object used by Entity and Location is identical.
 Phase 9.17 extends the connected `HumanEntity`/`Player` boundary with the real
 game-mode getter. See [`GAMEMODE_API.md`](GAMEMODE_API.md) for its mapping and
 thread-safety contract.
+
+Phase 9.18 extends the stable World adapter with its real Bukkit environment
+classification and documents the player-world transition model. See
+[`WORLD_ENVIRONMENT_API.md`](WORLD_ENVIRONMENT_API.md).
