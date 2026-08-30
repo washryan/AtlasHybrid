@@ -2,9 +2,9 @@
 
 ## Scope
 
-Phase 9.11 implements the Bukkit 1.19.2
-`AsyncPlayerPreLoginEvent` contract and bridges it to the real Forge login
-pipeline. It does not implement `PlayerLoginEvent`, proxy forwarding, or a
+Phases 9.11 and 9.12A implement the Bukkit 1.19.2
+`AsyncPlayerPreLoginEvent` and `PlayerLoginEvent` contracts and bridge them to
+the real Forge login pipeline. They do not implement proxy forwarding or a
 CraftBukkit login facade.
 
 The public contract was checked against Spigot API
@@ -18,10 +18,10 @@ present. Its result values are, in API order, `ALLOWED`, `KICK_FULL`,
 `PlayerPreLoginEvent` remains deprecated in the target API. AtlasHybrid carries
 its public data/result type because the deprecated compatibility overloads on
 `AsyncPlayerPreLoginEvent` reference it, but AtlasHybrid does not dispatch a
-second synchronous pre-login event. `PlayerLoginEvent` is deferred: it is a
-distinct cancellable stage with a constructed player and is the next LuckPerms
-boundary, not part of this phase. Existing `PlayerJoinEvent` and
-`PlayerQuitEvent` dispatch remains unchanged.
+second synchronous pre-login event. `PlayerLoginEvent` is a distinct,
+synchronous, result-based admission stage with a constructed player; it does
+not implement `Cancellable`. Existing `PlayerJoinEvent` and `PlayerQuitEvent`
+dispatch remains unchanged.
 
 ## Pipeline and thread model
 
@@ -33,7 +33,10 @@ TCP socket accepted
   -> AsyncPlayerPreLoginEvent
        denied -> close the real connection; no player/session/join
        allowed -> negotiation completes
-  -> vanilla player construction and registration
+  -> vanilla ServerPlayer construction (not online)
+  -> PlayerLoginEvent on Server thread
+       denied -> login disconnect; discard transient adapter
+       allowed -> continue unchanged vanilla/Forge placement
   -> Forge PlayerLoggedInEvent -> Bukkit PlayerJoinEvent
   ...
   -> Forge PlayerLoggedOutEvent -> Bukkit PlayerQuitEvent
@@ -73,8 +76,8 @@ the Bukkit annotation default (`false`) applies.
 |---|---|---|---|---|---|
 | `AsyncPlayerPreLoginEvent` | `onPlayerPreLogin` | `LOW` | Async | Wait for enable, respect an earlier denial, load user data, and deny with `KICK_OTHER` on load failure | Required |
 | `AsyncPlayerPreLoginEvent` | `onPlayerPreLoginMonitor` | `MONITOR` | Async | Prevent another listener from re-allowing a login whose data load failed | Required |
-| `PlayerLoginEvent` | `onPlayerLogin` | `LOWEST` | Sync | Resolve preloaded user, reject invalid loading state, inject the player permissible, and update context | Required for LuckPerms' Bukkit player integration; deferred |
-| `PlayerLoginEvent` | `onPlayerLoginMonitor` | `MONITOR` | Sync | Prevent re-allow after a LuckPerms denial and check permissible injection | Required for LuckPerms' Bukkit player integration; deferred |
+| `PlayerLoginEvent` | `onPlayerLogin` | `LOWEST` | Sync | Resolve preloaded user, reject invalid loading state, inject the player permissible, and update context | Implemented in 9.12A |
+| `PlayerLoginEvent` | `onPlayerLoginMonitor` | `MONITOR` | Sync | Prevent re-allow after a LuckPerms denial and check permissible injection | Implemented in 9.12A |
 | `PlayerQuitEvent` | `onPlayerQuit` | `MONITOR` | Sync | Disconnect user state and schedule permissible uninjection | Required; type already present |
 
 LuckPerms does not declare `PlayerPreLoginEvent` in this listener. Its other
@@ -95,3 +98,19 @@ once before the unchanged main integration proof and clean shutdown.
 Unit coverage includes construction, fields, default result, current and
 legacy result mappings, kick message, disallow/allow, asynchronous
 classification, listener priority, and listener-exception continuation.
+
+## Phase 9.12A synchronous gate
+
+At the gate, the real future `ServerPlayer` is wrapped in a CONNECTING adapter
+that is absent from online collections and UUID/name lookup. ALLOW promotes the
+same adapter at Forge `PlayerLoggedInEvent`; DENY closes it and its permission
+state before placement. Without proxy forwarding, `address` and `realAddress`
+are the same transport peer. Hostname is captured as `host:port` from
+`ClientIntentionPacket`; an IP address is never substituted. Unexpected bridge
+failures fail closed.
+
+The real protocol proof verifies exact `AsyncPreLogin -> PlayerLogin ->
+PlayerJoin` order, a login-stage denial with the exact kick reason and no
+join/online/session residue, and a control identity whose login event is not
+used by the plugin. `PLAYER_LOGIN_HOOK_OK` and `PLAYER_LOGIN_DENY_OK` occur
+exactly once. See [`MINECRAFT_LOGIN_HOOK.md`](MINECRAFT_LOGIN_HOOK.md).

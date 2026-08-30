@@ -1,0 +1,14 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "dev.atlashybrid.forge.mixin",
+  "compatibilityLevel": "JAVA_17",
+  "refmap": "atlashybrid.refmap.json",
+  "mixins": [
+    "ServerHandshakePacketListenerMixin",
+    "ServerLoginPacketListenerMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

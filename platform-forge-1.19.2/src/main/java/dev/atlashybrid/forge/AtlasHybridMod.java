@@ -44,6 +44,7 @@ import net.minecraftforge.fml.common.Mod;
 import org.bukkit.Bukkit;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.player.AsyncPlayerPreLoginEvent;
+import org.bukkit.event.player.PlayerLoginEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 
@@ -107,6 +108,31 @@ public final class AtlasHybridMod {
             permissionRegistry, permissionProviders, servicesManager);
         Bukkit.setServer(serverAdapter);
         serverAdapter.initializePermissions();
+        LoginAdmissionBridge.install(new LoginAdmissionBridge.AdmissionHandler() {
+            @Override
+            public LoginAdmissionBridge.AdmissionResult admit(ServerPlayer player, String hostname,
+                                                                java.net.InetAddress address) {
+                if (!event.getServer().isSameThread()) {
+                    throw new IllegalStateException("PlayerLoginEvent must execute on the Server thread");
+                }
+                org.bukkit.entity.Player adapter = serverAdapter.connectingPlayer(player);
+                PlayerLoginEvent bridged = new PlayerLoginEvent(adapter, hostname, address, address);
+                pluginManager.callEvent(bridged);
+                if (bridged.getResult() == PlayerLoginEvent.Result.ALLOWED) {
+                    return LoginAdmissionBridge.AdmissionResult.permit();
+                }
+                String reason = java.util.Objects.toString(bridged.getKickMessage(), "");
+                LOGGER.info("[AtlasHybrid Connection] Player login denied name=" + player.getGameProfile().getName()
+                    + " result=" + bridged.getResult() + " reason=" + reason);
+                serverAdapter.disconnect(player);
+                return LoginAdmissionBridge.AdmissionResult.denied(reason);
+            }
+
+            @Override
+            public void abort(ServerPlayer player) {
+                serverAdapter.disconnect(player);
+            }
+        });
         pluginRuntime = new PluginRuntime(serverAdapter, pluginManager, commands, scheduler, LOGGER, AtlasHybridMod.class.getClassLoader());
     }
 
@@ -242,7 +268,7 @@ public final class AtlasHybridMod {
     @SubscribeEvent
     public void onPlayerLogin(PlayerEvent.PlayerLoggedInEvent event) {
         if (pluginManager != null && event.getEntity() instanceof ServerPlayer player) {
-            pluginManager.callEvent(new PlayerJoinEvent(serverAdapter.player(player)));
+            pluginManager.callEvent(new PlayerJoinEvent(serverAdapter.promotePlayer(player)));
         }
     }
 
@@ -278,6 +304,7 @@ public final class AtlasHybridMod {
 
     @SubscribeEvent
     public void onServerStopped(ServerStoppedEvent event) {
+        LoginAdmissionBridge.clear();
         if (pluginRuntime != null) {
             pluginRuntime.close();
             pluginRuntime = null;

@@ -82,14 +82,28 @@ final class ForgeServerAdapter implements Server {
 
     ForgePlayerAdapter player(net.minecraft.server.level.ServerPlayer player) {
         return (ForgePlayerAdapter) players.getOrRegister(player.getUUID(), player.getGameProfile().getName(), () -> {
-            ForgePlayerAdapter adapter = new ForgePlayerAdapter(player, permissions, providers);
-            adapter.initializePermissions();
-            return adapter;
+            return createPlayer(player);
         });
+    }
+
+    ForgePlayerAdapter connectingPlayer(net.minecraft.server.level.ServerPlayer player) {
+        return (ForgePlayerAdapter) players.beginConnecting(player.getUUID(), player.getGameProfile().getName(),
+            () -> createPlayer(player));
+    }
+
+    ForgePlayerAdapter promotePlayer(net.minecraft.server.level.ServerPlayer player) {
+        Player promoted = players.promote(player.getUUID());
+        return promoted == null ? player(player) : (ForgePlayerAdapter) promoted;
     }
 
     void disconnect(net.minecraft.server.level.ServerPlayer player) {
         players.remove(player.getUUID());
+    }
+
+    private ForgePlayerAdapter createPlayer(net.minecraft.server.level.ServerPlayer player) {
+        ForgePlayerAdapter adapter = new ForgePlayerAdapter(player, permissions, providers);
+        adapter.initializePermissions();
+        return adapter;
     }
 
     int permissionProviderCount() { return providers.size(); }

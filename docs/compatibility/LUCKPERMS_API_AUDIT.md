@@ -464,3 +464,33 @@ one ForkJoinPool, with high name/stack ownership confidence. AtlasHybrid's
 rollback left zero permission providers and services. Normal `stop` saved the
 three dimensions, the launcher exited successfully, and no server Java process
 remained; no thread was killed or otherwise manipulated.
+
+## Phase 9.12A login gate and raw boot #12
+
+AtlasHybrid now constructs the actual future vanilla `ServerPlayer` at a
+pre-placement gate, exposes a hidden CONNECTING adapter to synchronous
+`PlayerLoginEvent`, and promotes that exact adapter only after Forge reports
+login. DENY sends a login disconnect before placement and removes the adapter
+and permission state. The hook is isolated to the Forge 1.19.2 platform and is
+documented in [`MINECRAFT_LOGIN_HOOK.md`](../architecture/MINECRAFT_LOGIN_HOOK.md).
+
+Raw boot #12 proves reflection and registration passed both LuckPerms
+`PlayerLoginEvent` handlers. Registration advanced from
+`BukkitConnectionListener` to `BukkitPlatformListener` and reached the next
+missing declared handler type:
+
+| Item | Classification |
+|---|---|
+| Passed boundary | `PlayerLoginEvent` LOWEST/MONITOR methods resolve; `BukkitConnectionListener` registration completes |
+| New symbol/path | `LPBukkitPlugin.registerPlatformListeners:137` -> `PluginManager#registerEvents` -> `Class#getDeclaredMethods` -> `org.bukkit.event.server.ServerCommandEvent` |
+| Diagnostic | `Missing API: org.bukkit.event.server.ServerCommandEvent`, `Status: NOT_IMPLEMENTED` |
+| Lifecycle phase | platform-listener registration; overall `registerPlatformListeners` and `onEnable` incomplete |
+| Public API? | Yes; synchronous server-command event contract |
+| CraftBukkit/NMS required for the type itself? | No; correct dispatch needs a separately audited command pipeline bridge |
+| Category | **CORE_API** |
+| Phase 9.12A action | Stop and document; no cascade |
+
+The post-stop dump observed eight parked daemon LuckPerms workers, daemon
+Okio/OkHttp support threads, and one non-daemon OkHttp writer. The Minecraft
+server stopped and saved normally, but the external writer retained the JVM
+until the launcher was interrupted.

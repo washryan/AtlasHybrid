@@ -61,11 +61,14 @@ public final class AtlasHybridTestMod {
         if (!probeRan && ticks >= 5 && loginProof != null && loginProof.isDone()) {
             probeRan = true;
             LoginProofResult login = loginProof.join();
-            if (!login.denied() || !login.allowed() || !login.joinObserved() || !login.quitCleanupObserved()) {
+            if (!login.preLoginDenied() || !login.loginDenied() || !login.allowed()
+                || !login.joinObserved() || !login.quitCleanupObserved() || !login.vanillaGateAllowed()) {
                 throw new IllegalStateException("Real login proof failed: " + login);
             }
             LOGGER.info("[AtlasHybridIntegration] ASYNC_PRELOGIN_OK");
             LOGGER.info("[AtlasHybridIntegration] PRELOGIN_DENY_OK");
+            LOGGER.info("[AtlasHybridIntegration] PLAYER_LOGIN_HOOK_OK");
+            LOGGER.info("[AtlasHybridIntegration] PLAYER_LOGIN_DENY_OK");
             runProbe();
         }
         if (ticks >= 300 && !probeRan) {
@@ -82,16 +85,25 @@ public final class AtlasHybridTestMod {
     private LoginProofResult runRealLoginProof() {
         try {
             LoginResponse denied = loginDenied("AtlasDenied");
-            boolean deniedSessionAbsent = remainsPlayerAbsent("AtlasDenied", 2_000L);
+            boolean deniedSessionAbsent = remainsPlayerAbsent("AtlasDenied", 2_000L)
+                && absentFromMinecraftAndBukkit("AtlasDenied");
+            LoginResponse loginDenied = loginDenied("AtlasLoginDenied");
+            boolean loginDeniedSessionAbsent = remainsPlayerAbsent("AtlasLoginDenied", 2_000L)
+                && absentFromMinecraftAndBukkit("AtlasLoginDenied");
+            LoginResponse vanillaGate = loginAndHold("AtlasVanillaGate");
             LoginResponse allowed = loginAndHold("AtlasAllowed");
             return new LoginProofResult(
                 denied.packetId() == 0
                     && (denied.payload().contains("AtlasHybrid integration deny")
                         || denied.payload().equals("connection-closed-after-deny"))
                     && deniedSessionAbsent,
+                loginDenied.packetId() == 0
+                    && loginDenied.payload().contains("AtlasHybrid PlayerLoginEvent deny")
+                    && loginDeniedSessionAbsent,
                 allowed.packetId() == 2,
                 allowed.joinObserved(),
-                allowed.quitCleanupObserved()
+                allowed.quitCleanupObserved(),
+                vanillaGate.packetId() == 2 && vanillaGate.joinObserved() && vanillaGate.quitCleanupObserved()
             );
         } catch (IOException exception) {
             throw new IllegalStateException("Real Minecraft login probe failed", exception);
@@ -99,16 +111,15 @@ public final class AtlasHybridTestMod {
     }
 
     private LoginResponse loginDenied(String name) throws IOException {
-        try {
-            return login(name);
+        try (Socket socket = openLoginSocket(name)) {
+            LoginResponse response = readLoginResponse(socket);
+            if (response.packetId() == 0) {
+                // Let the server finish its own disconnect before the client socket is closed.
+                socket.getInputStream().read();
+            }
+            return response;
         } catch (EOFException expectedTransportClose) {
             return new LoginResponse(0, "connection-closed-after-deny", false, false);
-        }
-    }
-
-    private LoginResponse login(String name) throws IOException {
-        try (Socket socket = openLoginSocket(name)) {
-            return readLoginResponse(socket);
         }
     }
 
@@ -195,6 +206,22 @@ public final class AtlasHybridTestMod {
         return true;
     }
 
+    private boolean absentFromMinecraftAndBukkit(String name) {
+        CompletableFuture<Boolean> result = new CompletableFuture<>();
+        server.execute(() -> {
+            boolean absent = org.bukkit.Bukkit.getServer().getPlayerExact(name) == null
+                && server.getPlayerList().getPlayerByName(name) == null;
+            for (ServerLevel level : server.getAllLevels()) {
+                if (level.players().stream().anyMatch(player -> player.getGameProfile().getName().equals(name))) {
+                    absent = false;
+                    break;
+                }
+            }
+            result.complete(absent);
+        });
+        return result.orTimeout(5, java.util.concurrent.TimeUnit.SECONDS).join();
+    }
+
     private static void writePacket(DataOutputStream output, byte[] packet) throws IOException {
         writeVarInt(output, packet.length);
         output.write(packet);
@@ -234,7 +261,8 @@ public final class AtlasHybridTestMod {
 
     private record LoginResponse(int packetId, String payload, boolean joinObserved, boolean quitCleanupObserved) { }
 
-    private record LoginProofResult(boolean denied, boolean allowed, boolean joinObserved, boolean quitCleanupObserved) { }
+    private record LoginProofResult(boolean preLoginDenied, boolean loginDenied, boolean allowed,
+                                    boolean joinObserved, boolean quitCleanupObserved, boolean vanillaGateAllowed) { }
 
     private void runProbe() {
         LOGGER.info("[AtlasHybridIntegration] PROBE_START");

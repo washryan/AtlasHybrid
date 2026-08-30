@@ -516,3 +516,45 @@ ForkJoinPool; the explicit names and stacks give high ownership confidence,
 but daemon state means they did not prevent exit. Normal `stop` saved all
 dimensions, Gradle exited `0` with `BUILD SUCCESSFUL`, and no Forge server Java
 process remained. LuckPerms remains **BLOCKED** and unsupported.
+
+## Phase 9.12A raw boot #12
+
+Phase 9.12A adds the public synchronous `PlayerLoginEvent` contract and a
+version-pinned pre-placement gate. A real protocol-760 proof verified
+`AsyncPlayerPreLoginEvent -> PlayerLoginEvent -> PlayerJoinEvent`, stable
+CONNECTING-to-ONLINE adapter identity, hostname/address data, and a real
+login-stage denial with the requested disconnect reason and no join, online
+entry, world placement or session residue. Both new markers occurred once. The
+suite passed `101/101`; integration, WelcomeMessage, WarpPlugin and both
+reproducible builds passed.
+
+The unchanged LuckPerms 5.5.81 artifact resolved both `PlayerLoginEvent`
+handlers and completed registration of `BukkitConnectionListener`. The next
+`registerPlatformListeners` call attempted to reflect
+`BukkitPlatformListener` and failed at:
+
+```text
+[AtlasHybrid Compatibility]
+Plugin: LuckPerms
+Missing API: org.bukkit.event.server.ServerCommandEvent
+Status: NOT_IMPLEMENTED
+Runtime: 0.1.0-alpha
+
+java.lang.NoClassDefFoundError: org/bukkit/event/server/ServerCommandEvent
+    at java.lang.Class.getDeclaredMethods0(Native Method)
+    at dev.atlashybrid.runtime.event.AtlasPluginManager.registerEvents(AtlasPluginManager.java:57)
+    at me.lucko.luckperms.bukkit.LPBukkitPlugin.registerPlatformListeners(LPBukkitPlugin.java:137)
+```
+
+Classification: **CORE_API**. `ServerCommandEvent` is a public Bukkit event
+type. Correct command-pipeline dispatch is a separate phase; it was not stubbed
+or implemented here. The overall `registerPlatformListeners` method and
+LuckPerms `onEnable` did not complete.
+
+Best-effort disable again hit the known suppressed partial-initialization null
+dereference. AtlasHybrid rolled back to zero permission providers/services.
+After normal Minecraft stop saved all dimensions, a thread dump showed eight
+daemon `luckperms-worker-*` threads, daemon Okio/OkHttp threads, and the
+non-daemon `OkHttp metadata.luckperms.net Writer`; the latter kept the launcher
+alive, so it was interrupted after the server had stopped. LuckPerms remains
+**BLOCKED** and unsupported.

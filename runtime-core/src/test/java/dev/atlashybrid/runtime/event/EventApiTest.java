@@ -30,6 +30,8 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.HandlerList;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.AsyncPlayerPreLoginEvent;
+import org.bukkit.event.player.PlayerLoginEvent;
+import org.bukkit.entity.Player;
 import org.bukkit.permissions.Permission;
 import org.bukkit.permissions.PermissionAttachment;
 import org.bukkit.permissions.PermissionAttachmentInfo;
@@ -173,6 +175,24 @@ class EventApiTest {
         assertEquals(List.of("low", "monitor"), order);
         assertTrue(logs.records.stream().anyMatch(record ->
             record.getMessage().contains("Event: AsyncPlayerPreLoginEvent")
+                && record.getMessage().contains("Status: EXECUTION_FAILED")));
+    }
+
+    @Test
+    void playerLoginUsesPriorityOrderAndContinuesAfterListenerFailure() throws Exception {
+        List<String> order = new ArrayList<>();
+        manager.registerEvent(PlayerLoginEvent.class, new Listener() { }, EventPriority.LOWEST,
+            (registered, event) -> order.add("lowest"), plugin);
+        manager.registerEvent(PlayerLoginEvent.class, new NamedListener(), EventPriority.NORMAL,
+            (registered, event) -> { throw new EventException(new IllegalStateException("login boom")); }, plugin);
+        manager.registerEvent(PlayerLoginEvent.class, new Listener() { }, EventPriority.MONITOR,
+            (registered, event) -> order.add("monitor"), plugin);
+        Player player = (Player) java.lang.reflect.Proxy.newProxyInstance(Player.class.getClassLoader(),
+            new Class<?>[] { Player.class }, (proxy, method, arguments) -> null);
+        manager.callEvent(new PlayerLoginEvent(player, "localhost:25565", InetAddress.getLoopbackAddress()));
+        assertEquals(List.of("lowest", "monitor"), order);
+        assertTrue(logs.records.stream().anyMatch(record ->
+            record.getMessage().contains("Event: PlayerLoginEvent")
                 && record.getMessage().contains("Status: EXECUTION_FAILED")));
     }
 

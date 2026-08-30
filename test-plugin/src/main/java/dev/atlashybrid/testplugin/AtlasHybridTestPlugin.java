@@ -22,6 +22,7 @@ import org.bukkit.event.HandlerList;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.player.AsyncPlayerPreLoginEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerLoginEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.permissions.Permission;
@@ -32,6 +33,8 @@ import org.bukkit.plugin.ServicePriority;
 public final class AtlasHybridTestPlugin extends JavaPlugin implements Listener, CommandExecutor {
     private final java.util.logging.Logger earlyLogger = getLogger();
     private org.bukkit.entity.Player sessionPlayer;
+    private final java.util.concurrent.ConcurrentMap<String, java.util.List<String>> loginOrder =
+        new java.util.concurrent.ConcurrentHashMap<>();
 
     @Override
     public void onLoad() {
@@ -117,6 +120,13 @@ public final class AtlasHybridTestPlugin extends JavaPlugin implements Listener,
 
     @EventHandler
     public void onJoin(PlayerJoinEvent event) {
+        if (event.getPlayer().getName().equals("AtlasLoginDenied")) {
+            throw new IllegalStateException("Denied PlayerLoginEvent reached PlayerJoinEvent");
+        }
+        if (event.getPlayer().getName().equals("AtlasAllowed")) {
+            appendLoginStage("AtlasAllowed", "PlayerJoin");
+            requireLoginOrder("AtlasAllowed", java.util.List.of("AsyncPreLogin", "PlayerLogin", "PlayerJoin"));
+        }
         sessionPlayer = event.getPlayer();
         getLogger().info("[AtlasHybridTestPlugin] PlayerJoinEvent: " + event.getPlayer().getName());
         PermissionAttachment attachment = event.getPlayer().addAttachment(this, "atlas.test.attachment", true);
@@ -153,7 +163,8 @@ public final class AtlasHybridTestPlugin extends JavaPlugin implements Listener,
 
     @EventHandler(priority = EventPriority.LOW)
     public void onAsyncPreLogin(AsyncPlayerPreLoginEvent event) {
-        if (!event.getName().equals("AtlasDenied") && !event.getName().equals("AtlasAllowed")) return;
+        if (!event.getName().equals("AtlasDenied") && !event.getName().equals("AtlasAllowed")
+            && !event.getName().equals("AtlasLoginDenied")) return;
         java.util.UUID expected = java.util.UUID.nameUUIDFromBytes(
             ("OfflinePlayer:" + event.getName()).getBytes(StandardCharsets.UTF_8));
         if (!event.isAsynchronous()
@@ -165,8 +176,33 @@ public final class AtlasHybridTestPlugin extends JavaPlugin implements Listener,
         if (event.getName().equals("AtlasDenied")) {
             event.disallow(AsyncPlayerPreLoginEvent.Result.KICK_OTHER, "AtlasHybrid integration deny");
         } else {
+            appendLoginStage(event.getName(), "AsyncPreLogin");
             event.disallow(AsyncPlayerPreLoginEvent.Result.KICK_OTHER, "temporary");
             event.allow();
+        }
+    }
+
+    @EventHandler(priority = EventPriority.LOWEST)
+    public void onLogin(PlayerLoginEvent event) {
+        String name = event.getPlayer().getName();
+        if (!name.equals("AtlasAllowed") && !name.equals("AtlasLoginDenied")) return;
+        java.util.UUID expected = java.util.UUID.nameUUIDFromBytes(
+            ("OfflinePlayer:" + name).getBytes(StandardCharsets.UTF_8));
+        if (event.isAsynchronous()
+            || !Thread.currentThread().getName().equals("Server thread")
+            || !event.getAddress().isLoopbackAddress()
+            || !event.getAddress().equals(event.getRealAddress())
+            || !event.getHostname().equals("localhost:25565")
+            || !expected.equals(event.getPlayer().getUniqueId())
+            || getServer().getPlayer(expected) != null
+            || getServer().getPlayerExact(name) != null
+            || getServer().getOnlinePlayers().stream().anyMatch(player -> player.getUniqueId().equals(expected))) {
+            throw new IllegalStateException("PlayerLoginEvent connection/transient-state contract mismatch");
+        }
+        appendLoginStage(name, "PlayerLogin");
+        requireLoginOrder(name, java.util.List.of("AsyncPreLogin", "PlayerLogin"));
+        if (name.equals("AtlasLoginDenied")) {
+            event.disallow(PlayerLoginEvent.Result.KICK_OTHER, "AtlasHybrid PlayerLoginEvent deny");
         }
     }
 
@@ -198,6 +234,24 @@ public final class AtlasHybridTestPlugin extends JavaPlugin implements Listener,
             PermissionProviderPriority.NORMAL);
         getServer().getServicesManager().register(PermissionProofService.class,
             () -> "ready", this, ServicePriority.Normal);
+    }
+
+    private void appendLoginStage(String name, String stage) {
+        java.util.List<String> order = loginOrder.computeIfAbsent(name,
+            ignored -> java.util.Collections.synchronizedList(new java.util.ArrayList<>()));
+        synchronized (order) {
+            if (order.contains(stage)) throw new IllegalStateException("Duplicate login lifecycle stage: " + name + " " + stage);
+            order.add(stage);
+        }
+    }
+
+    private void requireLoginOrder(String name, java.util.List<String> expected) {
+        java.util.List<String> order = loginOrder.get(name);
+        synchronized (order) {
+            if (!java.util.List.copyOf(order).equals(expected)) {
+                throw new IllegalStateException("Login lifecycle order mismatch for " + name + ": " + order);
+            }
+        }
     }
 
     @FunctionalInterface

@@ -117,6 +117,43 @@ class PlayerSessionRegistryTest {
             () -> registry().getOrRegister(FIRST_ID, "Alice", () -> new FakePlayer(SECOND_ID, "Bob")));
     }
 
+    @Test
+    void connectingPlayerIsHiddenUntilPromotedAndKeepsIdentity() {
+        PlayerSessionRegistry registry = registry();
+        FakePlayer player = new FakePlayer(FIRST_ID, "Alice");
+        assertSame(player, registry.beginConnecting(FIRST_ID, "Alice", () -> player));
+        assertTrue(registry.isConnecting(FIRST_ID));
+        assertTrue(registry.onlinePlayers().isEmpty());
+        assertNull(registry.getPlayer(FIRST_ID));
+        assertNull(registry.getPlayerExact("Alice"));
+        assertSame(player, registry.promote(FIRST_ID));
+        assertFalse(registry.isConnecting(FIRST_ID));
+        assertSame(player, registry.getPlayer(FIRST_ID));
+        assertSame(player, registry.onlinePlayers().iterator().next());
+    }
+
+    @Test
+    void deniedConnectingPlayerIsRemovedAndCleanedExactlyOnce() {
+        AtomicInteger cleanups = new AtomicInteger();
+        PlayerSessionRegistry registry = new PlayerSessionRegistry(player -> cleanups.incrementAndGet());
+        registry.beginConnecting(FIRST_ID, "Alice", () -> new FakePlayer(FIRST_ID, "Alice"));
+        registry.remove(FIRST_ID);
+        registry.remove(FIRST_ID);
+        assertFalse(registry.isConnecting(FIRST_ID));
+        assertTrue(registry.onlinePlayers().isEmpty());
+        assertEquals(1, cleanups.get());
+    }
+
+    @Test
+    void connectingNameCannotCollideWithAnotherSession() {
+        PlayerSessionRegistry registry = registry();
+        registry.beginConnecting(FIRST_ID, "Alice", () -> new FakePlayer(FIRST_ID, "Alice"));
+        assertThrows(IllegalStateException.class,
+            () -> registry.beginConnecting(SECOND_ID, "alice", () -> new FakePlayer(SECOND_ID, "alice")));
+        assertThrows(IllegalStateException.class,
+            () -> registry.getOrRegister(SECOND_ID, "ALICE", () -> new FakePlayer(SECOND_ID, "ALICE")));
+    }
+
     private static PlayerSessionRegistry registry() {
         return new PlayerSessionRegistry(player -> { });
     }

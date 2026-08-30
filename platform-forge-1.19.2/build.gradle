@@ -1,14 +1,17 @@
 buildscript {
     repositories {
         maven { url = 'https://maven.minecraftforge.net' }
+        maven { url = 'https://repo.spongepowered.org/repository/maven-public/' }
         mavenCentral()
     }
     dependencies {
         classpath 'net.minecraftforge.gradle:ForgeGradle:5.1.+'
+        classpath 'org.spongepowered:mixingradle:0.7.38'
     }
 }
 
 apply plugin: 'net.minecraftforge.gradle'
+apply plugin: 'org.spongepowered.mixin'
 
 evaluationDependsOn(':bukkit-api')
 evaluationDependsOn(':runtime-core')
@@ -17,6 +20,11 @@ evaluationDependsOn(':diagnostics')
 evaluationDependsOn(':test-mod')
 
 java { toolchain.languageVersion = JavaLanguageVersion.of(17) }
+
+mixin {
+    add sourceSets.main, 'atlashybrid.refmap.json'
+    config 'atlashybrid.mixins.json'
+}
 
 def manualServerRequested = gradle.startParameter.taskNames.any {
     it == 'runManualServer' || it.endsWith(':runManualServer')
@@ -169,6 +177,7 @@ tasks.matching { !manualServerRequested && !compatibilityServerRequested && it.n
 
 dependencies {
     minecraft "net.minecraftforge:forge:${rootProject.ext.minecraftVersion}-${rootProject.ext.forgeVersion}"
+    annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
     implementation project(':bukkit-api')
     implementation project(':runtime-core')
     implementation project(':plugin-loader')
@@ -187,7 +196,8 @@ jar {
             'Specification-Title': 'AtlasHybrid',
             'Specification-Version': project.version,
             'Implementation-Title': 'AtlasHybrid',
-            'Implementation-Version': project.version
+            'Implementation-Version': project.version,
+            'MixinConfigs': 'atlashybrid.mixins.json'
         )
     }
     finalizedBy 'reobfJar'
