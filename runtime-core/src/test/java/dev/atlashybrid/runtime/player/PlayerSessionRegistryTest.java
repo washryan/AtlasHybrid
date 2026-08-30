@@ -12,7 +12,9 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.bukkit.Location;
+import org.bukkit.World;
 import org.bukkit.command.CommandSender;
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.permissions.Permission;
 import org.bukkit.permissions.PermissionAttachment;
@@ -37,6 +39,12 @@ class PlayerSessionRegistryTest {
         assertSame(player, registered);
         assertSame(player, registry.getOrRegister(FIRST_ID, "Alice", () -> new FakePlayer(FIRST_ID, "Alice")));
         assertEquals(1, registry.onlinePlayers().size());
+        assertTrue(registered instanceof Entity);
+        Entity entity = registered;
+        assertEquals(FIRST_ID, entity.getUniqueId());
+        assertEquals(player.getEntityId(), entity.getEntityId());
+        assertSame(player.getWorld(), entity.getWorld());
+        assertEquals(player.getLocation(), entity.getLocation());
     }
 
     @Test
@@ -166,6 +174,7 @@ class PlayerSessionRegistryTest {
     private static final class FakePlayer implements Player {
         private final UUID id;
         private final String name;
+        private final World world = () -> "world";
         private boolean permission;
         private boolean closed;
 
@@ -175,8 +184,10 @@ class PlayerSessionRegistryTest {
         }
 
         @Override public UUID getUniqueId() { return id; }
+        @Override public int getEntityId() { return id.hashCode(); }
+        @Override public World getWorld() { return world; }
         @Override public String getDisplayName() { return name; }
-        @Override public Location getLocation() { return null; }
+        @Override public Location getLocation() { return new Location(world, 1.0D, 2.0D, 3.0D, 4.0F, 5.0F); }
         @Override public boolean teleport(Location location) { return false; }
         @Override public String getName() { return name; }
         @Override public void sendMessage(String message) { }

@@ -11,6 +11,7 @@ import java.util.UUID;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import org.bukkit.Location;
+import org.bukkit.World;
 import org.bukkit.entity.Player;
 import org.bukkit.permissions.Permission;
 import org.bukkit.permissions.PermissionAttachment;
@@ -39,10 +40,13 @@ final class ForgePlayerAdapter implements Player, AutoCloseable {
     net.minecraft.commands.CommandSourceStack commandSource() { return player.createCommandSourceStack(); }
 
     @Override public UUID getUniqueId() { return player.getUUID(); }
+    @Override public int getEntityId() { return player.getId(); }
+    @Override public World getWorld() {
+        return ((ForgeServerAdapter) org.bukkit.Bukkit.getServer()).world(player.getLevel());
+    }
     @Override public String getDisplayName() { throw CompatibilityRuntime.unsupported("org.bukkit.entity.Player#getDisplayName", "bukkit-player", CompatibilityStatus.NOT_IMPLEMENTED); }
     @Override public Location getLocation() {
-        ForgeServerAdapter server = (ForgeServerAdapter) org.bukkit.Bukkit.getServer();
-        return new Location(new ForgeWorldAdapter(player.getLevel(), server.worldName(player.getLevel())),
+        return new Location(getWorld(),
             player.getX(), player.getY(), player.getZ(), player.getYRot(), player.getXRot());
     }
     @Override public boolean teleport(Location location) {

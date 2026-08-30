@@ -605,3 +605,28 @@ OkHttp metadata writer. After normal Minecraft stop, nine workers, three
 OkHttp threads including the writer, and the H2 writer remained; the watchdog
 had exited. The writer retained the JVM until the launcher was interrupted. No
 server process remained afterward.
+
+## Phase 9.16 entity foundation and raw boot #16
+
+| Item | Classification |
+|---|---|
+| Exact former linkage | `BukkitCommandExecutor` compiler-generated selector predicate accepts `Entity`; reflection resolves it before selectors can execute |
+| Selector behavior | `Server#selectEntities` -> `instanceof Player` -> cast -> `Player#getUniqueId`; AtlasHybrid does not expose `selectEntities`, so execution is disabled |
+| Other LuckPerms Entity use | `FoliaSchedulerAdapter` calls Paper `Entity#getScheduler`; the Folia adapter is not selected on Forge |
+| Implemented core | public Entity/LivingEntity/HumanEntity/Player ancestry, UUID, Minecraft entity ID, live World and Location |
+| Registry policy | existing player session registry reused; no duplicate wrapper or premature generic registry |
+| EntityType | enum audited and deferred in full; no incomplete fake mapping |
+| Passed boundary | `Entity` links, `BukkitCommandExecutor` registers, and `registerCommands` completes |
+| New symbol/path | `AbstractLuckPermsPlugin.enable:233` -> `LPBukkitPlugin.setupContextManager:189` -> load `BukkitPlayerCalculator` -> `org.bukkit.GameMode` |
+| Exact subsequent use | `GameMode.class`, `GameMode.values`, `Player#getGameMode`, and `PlayerGameModeChangeEvent` |
+| Category | **CORE_API** |
+| CraftBukkit/NMS? | No for this symbol; later known permissible injection is still architectural |
+| LuckPerms enable | incomplete; `LUCKPERMS_ENABLE_REACHED` absent |
+| Phase 9.16 action | stop and document; no GameMode/event cascade |
+
+Raw boot #16 had six LuckPerms workers, four OkHttp threads, one Okio watchdog
+and one H2 writer before stop. After normal world-saving shutdown, five
+workers, three OkHttp threads and the H2 writer remained; Okio exited. The
+non-daemon OkHttp writer retained the JVM until the launcher was interrupted.
+No process remained. The regression suite passed `114/114`, integration and
+both external plugin proofs passed, and both clean builds were byte-identical.

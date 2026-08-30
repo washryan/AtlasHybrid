@@ -357,6 +357,24 @@ public final class AtlasHybridTestMod {
             || onlinePlayer != bukkitServer.getOnlinePlayers().iterator().next()) {
             throw new IllegalStateException("Online player registry did not expose a stable adapter");
         }
+        if (!(onlinePlayer instanceof org.bukkit.entity.Entity)) {
+            throw new IllegalStateException("Player does not implement Bukkit Entity");
+        }
+        org.bukkit.entity.Entity entity = onlinePlayer;
+        org.bukkit.Location entityLocation = entity.getLocation();
+        if (entity != onlinePlayer
+            || !entity.getUniqueId().equals(player.getUUID())
+            || entity.getEntityId() != player.getId()
+            || entity.getWorld() == null
+            || entityLocation.getWorld() != entity.getWorld()
+            || Math.abs(entityLocation.getX() - player.getX()) >= 0.001D
+            || Math.abs(entityLocation.getY() - player.getY()) >= 0.001D
+            || Math.abs(entityLocation.getZ() - player.getZ()) >= 0.001D
+            || Float.compare(entityLocation.getYaw(), player.getYRot()) != 0
+            || Float.compare(entityLocation.getPitch(), player.getXRot()) != 0) {
+            throw new IllegalStateException("Player Entity adapter coherence failed");
+        }
+        LOGGER.info("[AtlasHybridIntegration] ENTITY_API_OK");
         int playerMutation = server.getCommands().performPrefixedCommand(
             player.createCommandSourceStack(), "atlas player-original");
         server.getCommands().performPrefixedCommand(

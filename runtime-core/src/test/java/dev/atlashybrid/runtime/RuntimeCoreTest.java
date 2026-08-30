@@ -218,6 +218,8 @@ class RuntimeCoreTest {
 
     private static final class FakePlayer extends FakeSender implements Player {
         @Override public UUID getUniqueId() { return UUID.fromString("00000000-0000-0000-0000-000000000001"); }
+        @Override public int getEntityId() { return 1; }
+        @Override public org.bukkit.World getWorld() { return null; }
         @Override public String getDisplayName() { return getName(); }
         @Override public Location getLocation() { return null; }
         @Override public boolean teleport(Location location) { return false; }

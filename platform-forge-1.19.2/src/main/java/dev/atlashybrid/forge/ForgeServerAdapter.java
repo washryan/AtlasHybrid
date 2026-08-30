@@ -9,6 +9,8 @@ import dev.atlashybrid.runtime.permission.PermissionProviderRegistry;
 import dev.atlashybrid.runtime.player.PlayerSessionRegistry;
 import dev.atlashybrid.runtime.service.AtlasServicesManager;
 import java.util.Collection;
+import java.util.IdentityHashMap;
+import java.util.Map;
 import java.util.UUID;
 import java.util.logging.Logger;
 import net.minecraft.server.MinecraftServer;
@@ -37,6 +39,7 @@ final class ForgeServerAdapter implements Server {
     private final PlayerSessionRegistry players = new PlayerSessionRegistry(player -> ((ForgePlayerAdapter) player).close());
     private final ForgeConsoleCommandSender console;
     private final UnsafeValues unsafeValues = new AtlasUnsafeValues(AtlasUnsafeValues.MINECRAFT_1_19_2_DATA_VERSION);
+    private final Map<ServerLevel, ForgeWorldAdapter> worlds = new IdentityHashMap<>();
 
     ForgeServerAdapter(MinecraftServer minecraftServer, AtlasPluginManager pluginManager, AtlasScheduler scheduler, CommandRegistry commands,
                        AtlasPermissionRegistry permissions, PermissionProviderRegistry providers, AtlasServicesManager services) {
@@ -71,7 +74,7 @@ final class ForgeServerAdapter implements Server {
         for (ServerLevel level : minecraftServer.getAllLevels()) {
             String bukkitName = worldName(level);
             if (bukkitName.equalsIgnoreCase(name) || level.dimension().location().toString().equalsIgnoreCase(name)) {
-                return new ForgeWorldAdapter(level, bukkitName);
+                return world(level);
             }
         }
         return null;
@@ -106,11 +109,16 @@ final class ForgeServerAdapter implements Server {
         return adapter;
     }
 
+    synchronized ForgeWorldAdapter world(ServerLevel level) {
+        return worlds.computeIfAbsent(level, current -> new ForgeWorldAdapter(current, worldName(current)));
+    }
+
     int permissionProviderCount() { return providers.size(); }
     int serviceCount() { return services.size(); }
 
     void close() {
         players.clear();
+        synchronized (this) { worlds.clear(); }
         console.close();
     }
 

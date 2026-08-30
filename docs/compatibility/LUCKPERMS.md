@@ -703,3 +703,49 @@ The full suite passed `113/113`, integration and the
 WelcomeMessage/WarpPlugin regressions passed, and two clean builds produced
 byte-identical runtime, test-plugin, and test-mod JARs. LuckPerms remains
 **BLOCKED** and unsupported.
+
+## Phase 9.16 raw boot #16
+
+Phase 9.16 adds a connected `Entity -> LivingEntity -> HumanEntity -> Player`
+foundation. The existing player session adapter now exposes the Minecraft UUID
+and runtime entity ID plus its live Location and stable World adapter. No
+second wrapper, generic entity registry, `EntityType` subset, Mixin, NMS hook,
+or CraftBukkit facade was added. The complete scope audit is in
+[`ENTITY_API.md`](../architecture/ENTITY_API.md).
+
+The unchanged LuckPerms artifact crossed the former `Entity` reflection
+boundary. `BukkitCommandExecutor` registered successfully, so command
+registration completed. Startup then reached `setupContextManager`, where
+loading `BukkitPlayerCalculator` stopped at:
+
+```text
+[AtlasHybrid Compatibility]
+Plugin: LuckPerms
+Missing API: org.bukkit.GameMode
+Status: NOT_IMPLEMENTED
+Runtime: 0.1.0-alpha
+
+java.lang.NoClassDefFoundError: org/bukkit/GameMode
+    at me.lucko.luckperms.bukkit.LPBukkitPlugin.setupContextManager(LPBukkitPlugin.java:189)
+    at me.lucko.luckperms.common.plugin.AbstractLuckPermsPlugin.enable(AbstractLuckPermsPlugin.java:233)
+```
+
+`BukkitPlayerCalculator` uses `GameMode.class`, `GameMode.values()`,
+`Player#getGameMode`, and `PlayerGameModeChangeEvent`; it also has later World
+environment/list APIs. This is a new **CORE_API** boundary, not an Entity
+subtype and not CraftBukkit/NMS. Per the stop gate it was documented without a
+cascade implementation. LuckPerms `onEnable` remains incomplete and
+`LUCKPERMS_ENABLE_REACHED` was not recorded.
+
+Before stop there were six daemon `luckperms-worker-*` threads, four OkHttp
+threads (one non-daemon metadata writer), one daemon Okio watchdog, and one
+daemon H2 MVStore writer. Normal `stop` saved all dimensions. After stop there
+were five workers, three OkHttp threads including the non-daemon writer, zero
+Okio threads, and the H2 writer. The retained writer kept the JVM alive, so the
+launcher was interrupted after Minecraft shutdown; no compatibility server
+process remained.
+
+The suite passed `114/114`; integration, WelcomeMessage and WarpPlugin passed;
+`ENTITY_API_OK` appeared exactly once; and two clean builds produced
+byte-identical runtime, test-plugin and test-mod JARs. LuckPerms remains
+**BLOCKED** and unsupported.
