@@ -971,3 +971,20 @@ permission-platform contract, followed by a small public-API Player provider.
 The proposal is in
 [`LUCKPERMS_UPSTREAM_INTEGRATION_PROPOSAL.md`](../architecture/LUCKPERMS_UPSTREAM_INTEGRATION_PROPOSAL.md).
 Status remains **BLOCKED — ARCHITECTURAL DECISION**.
+
+## Phase 9.24A Forge feasibility result
+
+The Bukkit `5.5.81` result above is unchanged: it remains **BLOCKED** at the
+CraftBukkit-specific platform hook. A separate experiment tested the official,
+unchanged LuckPerms Forge `5.4.46` artifact for Minecraft 1.19.2.
+
+On the official Forge `43.5.0` production server it completed enable, selected
+`luckperms:permission_handler`, initialized H2, registered `/lp` and
+`/luckperms`, loaded a real protocol player with world/dimension/game-mode
+contexts, exposed the public API across Atlas' plugin classloader, completed
+`UNDEFINED -> TRUE -> FALSE -> UNDEFINED`, and shut down without retaining the
+JVM. This is **RESEARCH / POC**, not `PARTIAL` or `FULL`, because no
+`AtlasPermissible` provider bridge exists yet.
+
+See [`LUCKPERMS_FORGE_1_19_2.md`](LUCKPERMS_FORGE_1_19_2.md) and
+[`LUCKPERMS_FORGE_BRIDGE_FEASIBILITY.md`](../architecture/LUCKPERMS_FORGE_BRIDGE_FEASIBILITY.md).
