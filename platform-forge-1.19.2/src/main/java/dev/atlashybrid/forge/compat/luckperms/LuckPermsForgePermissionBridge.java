@@ -2,7 +2,7 @@ package dev.atlashybrid.forge.compat.luckperms;
 
 import dev.atlashybrid.runtime.permission.PermissionProviderPriority;
 import dev.atlashybrid.runtime.permission.PermissionProviderRegistry;
-import dev.atlashybrid.runtime.service.AtlasServicesManager;
+import dev.atlashybrid.loader.VirtualPluginDependencyRegistry;
 import java.util.Objects;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -10,6 +10,7 @@ import net.luckperms.api.LuckPerms;
 import net.luckperms.api.LuckPermsProvider;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.ServicePriority;
+import org.bukkit.plugin.ServicesManager;
 
 public final class LuckPermsForgePermissionBridge implements AutoCloseable {
     @FunctionalInterface
@@ -20,8 +21,9 @@ public final class LuckPermsForgePermissionBridge implements AutoCloseable {
     private static final String OWNER_NAME = "LuckPerms Forge permission bridge";
 
     private final PermissionProviderRegistry providers;
-    private final AtlasServicesManager services;
+    private final ServicesManager services;
     private final Plugin serviceOwner;
+    private final VirtualPluginDependencyRegistry virtualDependencies;
     private final Logger logger;
     private final ApiLookup apiLookup;
     private volatile LuckPermsBridgeState state = LuckPermsBridgeState.DISCOVERED;
@@ -31,23 +33,26 @@ public final class LuckPermsForgePermissionBridge implements AutoCloseable {
 
     public LuckPermsForgePermissionBridge(
         PermissionProviderRegistry providers,
-        AtlasServicesManager services,
+        ServicesManager services,
         Plugin serviceOwner,
+        VirtualPluginDependencyRegistry virtualDependencies,
         Logger logger
     ) {
-        this(providers, services, serviceOwner, logger, LuckPermsProvider::get);
+        this(providers, services, serviceOwner, virtualDependencies, logger, LuckPermsProvider::get);
     }
 
     LuckPermsForgePermissionBridge(
         PermissionProviderRegistry providers,
-        AtlasServicesManager services,
+        ServicesManager services,
         Plugin serviceOwner,
+        VirtualPluginDependencyRegistry virtualDependencies,
         Logger logger,
         ApiLookup apiLookup
     ) {
         this.providers = Objects.requireNonNull(providers, "providers");
         this.services = Objects.requireNonNull(services, "services");
         this.serviceOwner = Objects.requireNonNull(serviceOwner, "serviceOwner");
+        this.virtualDependencies = Objects.requireNonNull(virtualDependencies, "virtualDependencies");
         this.logger = Objects.requireNonNull(logger, "logger");
         this.apiLookup = Objects.requireNonNull(apiLookup, "apiLookup");
         logger.info("[AtlasHybrid LuckPerms] LUCKPERMS_FORGE_DISCOVERED LuckPerms Forge detected");
@@ -57,7 +62,7 @@ public final class LuckPermsForgePermissionBridge implements AutoCloseable {
         try {
             LuckPerms current = apiLookup.get();
             failureLogged = false;
-            if (boundApi == current && provider != null && serviceRegistrationIsCurrent()) return;
+            if (boundApi == current && provider != null && bindingsAreCurrent()) return;
             removeBindings();
             boundApi = current;
             provider = new LuckPermsPermissionProvider(current, logger);
@@ -67,6 +72,11 @@ public final class LuckPermsForgePermissionBridge implements AutoCloseable {
             services.register(LuckPerms.class, current, serviceOwner, ServicePriority.Normal);
             state = LuckPermsBridgeState.BUKKIT_SERVICE_REGISTERED;
             logger.info("[AtlasHybrid LuckPerms] LUCKPERMS_BUKKIT_SERVICE_REGISTERED public API registered with Bukkit ServicesManager");
+            virtualDependencies.registerAvailable(
+                "LuckPerms", serviceOwner, current.getPluginMetadata().getVersion(),
+                "LuckPerms Forge public API, permission provider and Bukkit service bridge");
+            state = LuckPermsBridgeState.VIRTUAL_DEPENDENCY_AVAILABLE;
+            logger.info("[AtlasHybrid LuckPerms] LUCKPERMS_VIRTUAL_DEPENDENCY_AVAILABLE name=LuckPerms");
         } catch (IllegalStateException notAvailableYet) {
             if (provider != null || boundApi != null) {
                 removeBindings();
@@ -96,14 +106,19 @@ public final class LuckPermsForgePermissionBridge implements AutoCloseable {
         if (wasBound) logger.info("[AtlasHybrid LuckPerms] LuckPerms Bukkit service and permission provider removed");
     }
 
-    private boolean serviceRegistrationIsCurrent() {
-        return services.getRegistrations(LuckPerms.class).stream()
+    private boolean bindingsAreCurrent() {
+        boolean serviceCurrent = services.getRegistrations(LuckPerms.class).stream()
             .filter(registration -> registration.getPlugin() == serviceOwner)
             .filter(registration -> registration.getProvider() == boundApi)
             .count() == 1;
+        boolean capabilityCurrent = virtualDependencies.findAvailable("LuckPerms")
+            .filter(capability -> capability.owner() == serviceOwner)
+            .isPresent();
+        return serviceCurrent && capabilityCurrent;
     }
 
     private void removeBindings() {
+        virtualDependencies.unregister("LuckPerms", serviceOwner);
         if (boundApi != null) services.unregister(LuckPerms.class, boundApi);
         if (provider != null) providers.unregister(provider);
         provider = null;

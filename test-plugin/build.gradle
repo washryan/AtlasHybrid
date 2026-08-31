@@ -2,6 +2,7 @@ plugins { id 'java' }
 
 sourceSets {
     failedEnable
+    luckPermsDependent
 }
 
 dependencies {
@@ -10,12 +11,24 @@ dependencies {
     compileOnly 'net.luckperms:api:5.4'
     failedEnableCompileOnly project(':bukkit-api')
     failedEnableCompileOnly project(':runtime-core')
+    luckPermsDependentCompileOnly project(':bukkit-api')
+    luckPermsDependentCompileOnly 'net.luckperms:api:5.4'
 }
 
 tasks.register('failedEnableJar', Jar) {
     archiveBaseName = 'AtlasHybridFailedEnableTestPlugin'
     from sourceSets.failedEnable.output
     manifest { attributes('Implementation-Version': project.version) }
+}
+
+tasks.register('luckPermsDependentJar', Jar) {
+    archiveBaseName = 'LuckPermsDependentProbe'
+    from sourceSets.luckPermsDependent.output
+    manifest { attributes('Implementation-Version': project.version) }
+}
+
+tasks.named('assemble') {
+    dependsOn tasks.named('luckPermsDependentJar')
 }
 
 jar {

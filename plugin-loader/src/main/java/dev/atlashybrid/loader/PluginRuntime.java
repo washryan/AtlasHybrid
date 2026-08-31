@@ -15,6 +15,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -34,6 +35,7 @@ public final class PluginRuntime implements AutoCloseable {
     private final AtlasScheduler scheduler;
     private final Logger logger;
     private final ClassLoader apiClassLoader;
+    private final VirtualPluginDependencyRegistry virtualDependencies;
     private final List<LoadedPlugin> loaded = new ArrayList<>();
     private final PluginMetadataParser parser = new PluginMetadataParser();
     private final DependencyResolver resolver = new DependencyResolver();
@@ -42,13 +44,22 @@ public final class PluginRuntime implements AutoCloseable {
     private final Map<String, List<PluginThreadMonitor.ThreadDiagnostic>> failedEnableThreadDiagnostics = new HashMap<>();
     private int discoveredCount;
 
-    public PluginRuntime(Server server, AtlasPluginManager pluginManager, CommandRegistry commands, AtlasScheduler scheduler, Logger logger, ClassLoader apiClassLoader) {
+    public PluginRuntime(Server server, AtlasPluginManager pluginManager, CommandRegistry commands,
+                         AtlasScheduler scheduler, Logger logger, ClassLoader apiClassLoader) {
+        this(server, pluginManager, commands, scheduler, logger, apiClassLoader,
+            new VirtualPluginDependencyRegistry(logger));
+    }
+
+    public PluginRuntime(Server server, AtlasPluginManager pluginManager, CommandRegistry commands,
+                         AtlasScheduler scheduler, Logger logger, ClassLoader apiClassLoader,
+                         VirtualPluginDependencyRegistry virtualDependencies) {
         this.server = server;
         this.pluginManager = pluginManager;
         this.commands = commands;
         this.scheduler = scheduler;
         this.logger = logger;
         this.apiClassLoader = apiClassLoader;
+        this.virtualDependencies = java.util.Objects.requireNonNull(virtualDependencies, "virtualDependencies");
     }
 
     public void loadAll(Path pluginsDirectory) throws IOException, DependencyResolutionException {
@@ -64,14 +75,31 @@ public final class PluginRuntime implements AutoCloseable {
             }
         }
         discoveredCount = candidates.size();
-        List<PluginCandidate> order = resolver.resolve(candidates);
+        Map<String, PluginCandidate> candidatesByName = new HashMap<>();
+        candidates.forEach(candidate -> candidatesByName.put(key(candidate.metadata().name()), candidate));
+        for (PluginCandidate candidate : candidates) {
+            virtualDependencies.findAvailable(candidate.metadata().name()).ifPresent(capability ->
+                logger.warning("[AtlasHybrid Virtual Dependency] conflict name=" + candidate.metadata().name()
+                    + " real plugin takes precedence over capability version=" + capability.version()));
+        }
+        List<PluginCandidate> order = resolver.resolve(candidates, virtualDependencies);
         Map<String, LoadedPlugin> byName = new HashMap<>();
         for (PluginCandidate candidate : order) {
-            boolean missingLoadedDependency = candidate.metadata().depend().stream().anyMatch(name -> !byName.containsKey(key(name)));
+            boolean missingLoadedDependency = candidate.metadata().depend().stream().anyMatch(name -> {
+                String dependencyKey = key(name);
+                if (candidatesByName.containsKey(dependencyKey)) return !byName.containsKey(dependencyKey);
+                return virtualDependencies.findAvailable(name).isEmpty();
+            });
             if (missingLoadedDependency) {
                 logger.severe("Skipping " + candidate.metadata().name() + " because a hard dependency failed to load");
                 continue;
             }
+            candidate.metadata().depend().stream()
+                .filter(name -> !candidatesByName.containsKey(key(name)))
+                .map(virtualDependencies::findAvailable)
+                .flatMap(Optional::stream)
+                .forEach(capability -> logger.info("[AtlasHybrid Virtual Dependency] VIRTUAL_DEPENDENCY_RESOLVED plugin="
+                    + candidate.metadata().name() + " dependency=" + capability.compatibilityName()));
             try {
                 LoadedPlugin plugin = loadOne(candidate, byName);
                 loaded.add(plugin);

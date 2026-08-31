@@ -8,8 +8,9 @@ Bukkit plugin compiled against `net.luckperms:api:5.4` discover and use the API
 without loading LuckPerms implementation classes.
 
 This bridge does not create a Bukkit plugin named LuckPerms. It does not make
-`PluginManager#getPlugin("LuckPerms")` succeed, satisfy `depend: [LuckPerms]`,
-provide the Bukkit PlayerAdapter, or implement Vault.
+`PluginManager#getPlugin("LuckPerms")` succeed, provide the Bukkit
+PlayerAdapter, or implement Vault. Phase 9.24D separately uses service readiness
+as one condition for generic virtual dependency resolution.
 
 ## Discovery and registration
 
@@ -97,7 +98,7 @@ A subsequent server start creates one fresh registration.
 The bridge uses only `net.luckperms.api.*` and existing public Bukkit service
 APIs. It contains no reflection, LuckPerms internals, CraftBukkit compatibility,
 Mixin, bytecode patch, shaded API, relocated API, external JAR, fake LuckPerms
-Plugin, dependency resolution, or Vault integration.
+Plugin, or Vault integration.
 
 Compatibility remains **PARTIAL**: public API service discovery and Player
 permission authority pass, while Bukkit plugin identity, hard dependencies,

@@ -13,6 +13,13 @@ import java.util.Set;
 
 public final class DependencyResolver {
     public List<PluginCandidate> resolve(List<PluginCandidate> candidates) throws DependencyResolutionException {
+        return resolve(candidates, new VirtualPluginDependencyRegistry(java.util.logging.Logger.getAnonymousLogger()));
+    }
+
+    public List<PluginCandidate> resolve(
+        List<PluginCandidate> candidates,
+        VirtualPluginDependencyRegistry virtualDependencies
+    ) throws DependencyResolutionException {
         Map<String, PluginCandidate> byName = new LinkedHashMap<>();
         for (PluginCandidate candidate : candidates.stream().sorted(Comparator.comparing(item -> item.jar().getFileName().toString())).toList()) {
             String key = key(candidate.metadata().name());
@@ -21,7 +28,11 @@ public final class DependencyResolver {
         }
         for (PluginCandidate candidate : candidates) {
             for (String dependency : candidate.metadata().depend()) {
-                if (!byName.containsKey(key(dependency))) throw new DependencyResolutionException("Plugin " + candidate.metadata().name() + " requires missing dependency " + dependency);
+                if (!byName.containsKey(key(dependency))
+                    && virtualDependencies.findAvailable(dependency).isEmpty()) {
+                    throw new DependencyResolutionException("Plugin " + candidate.metadata().name()
+                        + " requires missing dependency " + dependency);
+                }
             }
         }
         List<PluginCandidate> ordered = topological(byName, true);

@@ -1,0 +1,9 @@
+name: LuckPermsDependentProbe
+version: 0.1.0-alpha
+main: dev.atlashybrid.luckpermsprobe.LuckPermsDependentProbe
+api-version: '1.19'
+description: Validates AtlasHybrid virtual LuckPerms dependency resolution.
+authors: [AtlasHybrid]
+depend:
+  - LuckPerms
+softdepend: []

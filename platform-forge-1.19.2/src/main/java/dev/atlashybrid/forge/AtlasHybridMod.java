@@ -10,6 +10,7 @@ import dev.atlashybrid.forge.compat.luckperms.LuckPermsForgePermissionBridge;
 import dev.atlashybrid.forge.compat.AtlasCompatibilityServiceOwner;
 import dev.atlashybrid.loader.DependencyResolutionException;
 import dev.atlashybrid.loader.PluginRuntime;
+import dev.atlashybrid.loader.VirtualPluginDependencyRegistry;
 import dev.atlashybrid.runtime.command.CommandRegistry;
 import dev.atlashybrid.runtime.event.AtlasPluginManager;
 import dev.atlashybrid.runtime.scheduler.AtlasScheduler;
@@ -73,6 +74,7 @@ public final class AtlasHybridMod {
     private AtlasServicesManager servicesManager;
     private LuckPermsForgePermissionBridge luckPermsBridge;
     private AtlasCompatibilityServiceOwner compatibilityServiceOwner;
+    private VirtualPluginDependencyRegistry virtualDependencies;
 
     public AtlasHybridMod() {
         configureLogging();
@@ -108,6 +110,7 @@ public final class AtlasHybridMod {
         permissionRegistry = new AtlasPermissionRegistry();
         permissionProviders = new PermissionProviderRegistry(LOGGER);
         servicesManager = new AtlasServicesManager();
+        virtualDependencies = new VirtualPluginDependencyRegistry(LOGGER);
         AtlasPermissions.install(permissionProviders);
         pluginManager = new AtlasPluginManager(LOGGER, permissionRegistry, permissionProviders, servicesManager);
         scheduler = new AtlasScheduler(LOGGER);
@@ -145,11 +148,13 @@ public final class AtlasHybridMod {
                 serverAdapter.disconnect(player);
             }
         });
-        pluginRuntime = new PluginRuntime(serverAdapter, pluginManager, commands, scheduler, LOGGER, AtlasHybridMod.class.getClassLoader());
+        pluginRuntime = new PluginRuntime(serverAdapter, pluginManager, commands, scheduler, LOGGER,
+            AtlasHybridMod.class.getClassLoader(), virtualDependencies);
     }
 
     @SubscribeEvent
     public void onServerStarting(ServerStartingEvent event) {
+        refreshLuckPermsIntegration();
         try {
             pluginRuntime.loadAll(Path.of("plugins"));
             registerPluginCommands(event.getServer().getCommands().getDispatcher());
@@ -160,18 +165,7 @@ public final class AtlasHybridMod {
 
     @SubscribeEvent
     public void onServerStarted(ServerStartedEvent event) {
-        if (ModList.get().isLoaded("luckperms")) {
-            try {
-                luckPermsBridge = new LuckPermsForgePermissionBridge(
-                    permissionProviders, servicesManager, compatibilityServiceOwner, LOGGER);
-                luckPermsBridge.refresh();
-            } catch (RuntimeException | LinkageError failure) {
-                LOGGER.log(Level.WARNING,
-                    "[AtlasHybrid LuckPerms] Optional public API bridge unavailable; Atlas fallback remains active",
-                    failure);
-                luckPermsBridge = null;
-            }
-        }
+        refreshLuckPermsIntegration();
         pluginRuntime.enableAll();
         LOGGER.info("[AtlasHybrid] " + pluginRuntime.loadedCount() + " plugin(s) loaded and enable phase completed");
         LOGGER.info("[AtlasHybrid Compatibility]\n"
@@ -263,6 +257,23 @@ public final class AtlasHybridMod {
         if (event.phase != TickEvent.Phase.END) return;
         if (luckPermsBridge != null) luckPermsBridge.refresh();
         if (scheduler != null) scheduler.tick();
+    }
+
+    private void refreshLuckPermsIntegration() {
+        if (!ModList.get().isLoaded("luckperms")) return;
+        try {
+            if (luckPermsBridge == null) {
+                luckPermsBridge = new LuckPermsForgePermissionBridge(
+                    permissionProviders, servicesManager, compatibilityServiceOwner,
+                    virtualDependencies, LOGGER);
+            }
+            luckPermsBridge.refresh();
+        } catch (RuntimeException | LinkageError failure) {
+            LOGGER.log(Level.WARNING,
+                "[AtlasHybrid LuckPerms] Optional public API bridge unavailable; Atlas fallback remains active",
+                failure);
+            luckPermsBridge = null;
+        }
     }
 
     @SubscribeEvent(priority = EventPriority.HIGHEST)
@@ -425,6 +436,7 @@ public final class AtlasHybridMod {
     public void onServerStopping(ServerStoppingEvent event) {
         if (luckPermsBridge != null) luckPermsBridge.close();
         if (compatibilityServiceOwner != null) {
+            virtualDependencies.unregisterAll(compatibilityServiceOwner);
             servicesManager.unregisterAll(compatibilityServiceOwner);
             compatibilityServiceOwner.close();
         }
@@ -456,5 +468,6 @@ public final class AtlasHybridMod {
         servicesManager = null;
         luckPermsBridge = null;
         compatibilityServiceOwner = null;
+        virtualDependencies = null;
     }
 }

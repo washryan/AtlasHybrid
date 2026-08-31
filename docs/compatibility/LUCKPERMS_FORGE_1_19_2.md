@@ -119,8 +119,8 @@ contexts manually when the online native subject is available.
 ## Bukkit limitations
 
 - Forge LuckPerms is a mod, not a Bukkit `Plugin`.
-- A Bukkit `depend: [LuckPerms]` currently fails Atlas plugin dependency
-  resolution because only Bukkit plugin candidates satisfy hard dependencies.
+- Before Phase 9.24D, a Bukkit `depend: [LuckPerms]` failed because only Bukkit
+  plugin candidates satisfied hard dependencies.
 - `PluginManager#getPlugin("LuckPerms")` returns no plugin.
 - Forge LuckPerms does not publish itself in the Bukkit `ServicesManager`, but
   the Phase 9.24C Atlas bridge publishes the same public instance there under
@@ -138,8 +138,8 @@ server or non-daemon LuckPerms thread retained the process.
 
 The Forge backend feasibility gate, the Phase 9.24B Player permission-query
 bridge and the Phase 9.24C public service bridge pass. Compatibility is
-`PARTIAL` because Bukkit plugin identity, hard dependency resolution, Bukkit
-PlayerAdapter and Vault remain outside these bridges.
+`PARTIAL` because Bukkit plugin identity, Bukkit PlayerAdapter and Vault remain
+outside these bridges. Phase 9.24D later adds scoped hard-dependency resolution.
 
 ## Atlas regression and reproducibility
 
@@ -233,7 +233,32 @@ permission provider before LuckPerms closed H2, leaving zero Atlas providers
 and services. Restart registered exactly one fresh service. The Atlas-only boot
 remained unchanged when LuckPerms was absent.
 
-This status is deliberately scoped. It does not create a Bukkit plugin
-identity, satisfy `depend: [LuckPerms]`, supply a Bukkit `PlayerAdapter`,
-implement Vault, or claim Bukkit permission registry/subscription parity. See
+At the end of Phase 9.24C, this status was deliberately scoped: it did not
+create a Bukkit plugin identity or yet satisfy `depend: [LuckPerms]`, and did
+not supply a Bukkit `PlayerAdapter`, Vault, or permission registry/subscription
+parity. See
 [`LUCKPERMS_FORGE_SERVICES_BRIDGE.md`](../architecture/LUCKPERMS_FORGE_SERVICES_BRIDGE.md).
+
+## Phase 9.24D virtual dependency capability
+
+Atlas now explicitly registers a generic loader capability named `LuckPerms`
+only after the permission provider and public Bukkit service bridges are both
+ready. This allows a plugin declaring `depend: [LuckPerms]` to load and enable
+without inventing a Bukkit LuckPerms Plugin.
+
+The dedicated `LuckPermsDependentProbe` proved that the public service and
+UserManager are available during `onEnable`. The inverse production run, with
+the original LuckPerms JAR temporarily absent, rejected the same probe as a
+missing hard dependency and loaded no fake service or capability.
+
+Real Bukkit plugin candidates retain precedence. Capabilities do not appear in
+PluginManager lookup/enumeration/enabled-state APIs and emit no fake lifecycle
+events. `softdepend` stays non-blocking; virtual `loadbefore` has no semantics
+because Atlas does not currently implement that metadata field.
+
+Supported scope now includes Player permission authority, public LuckPerms API
+through ServicesManager, and `depend: [LuckPerms]` resolution. Concrete Bukkit
+LuckPerms plugin identity, Bukkit PlayerAdapter, Vault and full registry or
+subscription parity remain unsupported. See
+[`LUCKPERMS_FORGE_VIRTUAL_DEPENDENCY.md`](../architecture/LUCKPERMS_FORGE_VIRTUAL_DEPENDENCY.md)
+and [`VIRTUAL_PLUGIN_DEPENDENCIES.md`](../architecture/VIRTUAL_PLUGIN_DEPENDENCIES.md).

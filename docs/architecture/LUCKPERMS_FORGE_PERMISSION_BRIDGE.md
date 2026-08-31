@@ -101,7 +101,8 @@ events, scheduler, block-break cancellation and shutdown.
 
 - no Bukkit plugin identity associated with the `LuckPerms.class` service;
 - no fake `PluginManager#getPlugin("LuckPerms")` result;
-- no satisfaction of `depend: [LuckPerms]`;
+- no direct satisfaction of `depend: [LuckPerms]` in the permission bridge
+  (Phase 9.24D supplies a separate generic loader capability);
 - no Vault bridge;
 - no Bukkit `PlayerAdapter` claim;
 - no private reflection, LuckPerms implementation API, bytecode patch, Mixin,
