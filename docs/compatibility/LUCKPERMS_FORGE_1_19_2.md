@@ -279,8 +279,35 @@ detection, and its earlier architectural failure means this sample does not
 justify a fake Bukkit LuckPerms Plugin. LPC's Bukkit `PlayerAdapter` path was
 source-confirmed but not reached after its event blocker.
 
-The scoped integration therefore remains **PARTIAL / PASS**. Phase 9.26 should
-first address the shared generic configuration-defaults contract, not Vault,
-fake plugin identity or a speculative PlayerAdapter. Full provenance, hashes,
-source audit, raw results and the decision gate are in
+The scoped integration therefore remains **PARTIAL / PASS**. If compatibility
+development resumes, the shared generic configuration-defaults contract is the
+first evidence-backed candidate; no Phase 9.26 work has started. Full
+provenance, hashes, source audit, raw results and the decision gate are in
 [`LUCKPERMS_REAL_WORLD_MATRIX.md`](LUCKPERMS_REAL_WORLD_MATRIX.md).
+
+## Playable development milestone
+
+AtlasHybrid `0.1.0-alpha` now has a persistent local playtest server for
+Minecraft `1.19.2`, Forge `43.5.0` and the original LuckPerms Forge `5.4.46`
+artifact. This is a **playable development milestone**, not an official
+release. The world, logs, external LuckPerms JAR, H2 database and other
+`run-playtest/` state remain outside Git.
+
+The validated **PARTIAL / PASS** scope is:
+
+- Bukkit `Player#hasPermission` delegation with TRUE, FALSE and UNDEFINED
+  fallback semantics;
+- live world, dimension-type and gamemode contexts;
+- login, logout and relogin lifecycle;
+- the same public LuckPerms API instance through Bukkit ServicesManager;
+- virtual `depend: [LuckPerms]` resolution after both bridges are ready;
+- `reloadconfig`, direct permissions, groups and H2 persistence;
+- official web-editor session generation and page loading;
+- orderly service/provider/capability removal, H2 close and process exit.
+
+Still unsupported are `PluginManager#getPlugin("LuckPerms")`, a Bukkit
+LuckPerms Plugin identity, Bukkit `PlayerAdapter<Player>`, Vault, TAB's
+CraftBukkit/NMS assumptions and the missing generic Bukkit APIs identified by
+the Phase 9.25 matrix. The exact local start, connection and command workflow
+is preserved in
+[`LUCKPERMS_MANUAL_PLAYTEST.md`](../playtest/LUCKPERMS_MANUAL_PLAYTEST.md).

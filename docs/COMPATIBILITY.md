@@ -22,3 +22,22 @@ Compatibility is assigned from observed behavior on AtlasHybrid, not from a perc
 | Vault | 1.7.3-b131 | Bukkit / tested on 1.19.2 | ⛔ BLOCKED | Original plugin discovered and loaded at startup | First blocker is the same generic configuration `addDefault`; Vault provider behavior was not reached |
 
 See the detailed reports for [WelcomeMessage](compatibility/WELCOME_MESSAGE.md), [WarpPlugin](compatibility/WARPPLUGIN.md), [LuckPerms Bukkit](compatibility/LUCKPERMS.md), the [LuckPerms Forge feasibility proof](compatibility/LUCKPERMS_FORGE_1_19_2.md), and the [real-world LuckPerms matrix](compatibility/LUCKPERMS_REAL_WORLD_MATRIX.md) for scope, provenance and evidence.
+
+## Playable development milestone
+
+AtlasHybrid `0.1.0-alpha` has reached a playable development milestone with a
+persistent local Minecraft `1.19.2` / Forge `43.5.0` server and the unmodified
+LuckPerms Forge `5.4.46` artifact. This is a development checkpoint, not an
+official release or a claim of complete Bukkit compatibility.
+
+The **PARTIAL / PASS** LuckPerms Forge scope includes `Player#hasPermission`
+TRUE/FALSE/UNDEFINED handling, live contexts, login/logout, the public LuckPerms
+API through Bukkit ServicesManager, virtual `depend: [LuckPerms]` resolution,
+`reloadconfig`, groups, permission persistence, web-editor session generation
+and clean shutdown.
+
+It does not provide `PluginManager#getPlugin("LuckPerms")`, a Bukkit LuckPerms
+Plugin identity, Bukkit `PlayerAdapter<Player>`, Vault, TAB's CraftBukkit/NMS
+requirements, or the missing generic Bukkit APIs recorded in the real-world
+matrix. See the [manual playtest guide](playtest/LUCKPERMS_MANUAL_PLAYTEST.md)
+for the local server workflow and verified commands.

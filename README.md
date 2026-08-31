@@ -10,10 +10,13 @@ It is not a fork of Mohist, Arclight, Magma, CraftBukkit, Spigot, or Paper.
 
 ## Status
 
-Version `0.1.0-alpha` is a narrow proof of architecture. The target runtime is
-Minecraft `1.19.2` with the recommended Forge `43.5.0` on Java 17.
+Version `0.1.0-alpha` remains a narrow proof of architecture, but has reached a
+**playable development milestone** on Minecraft `1.19.2`, Forge `43.5.0` and
+Java 17. A persistent local playtest server has been validated with the
+unmodified LuckPerms Forge `5.4.46` artifact.
 
-No claim of complete Bukkit, Spigot, or Paper compatibility is made.
+This milestone is not an official release. No claim of complete Bukkit,
+Spigot, Paper or LuckPerms Bukkit compatibility is made.
 
 ## Goal
 
@@ -35,6 +38,11 @@ run `run-manual-server.bat`; see
 [`docs/MANUAL_TEST_0.1.0-alpha.md`](docs/MANUAL_TEST_0.1.0-alpha.md).
 
 Never point the development `run/` directory at a personal or production server.
+
+For the persistent local LuckPerms playtest profile, follow the
+[manual playtest guide](docs/playtest/LUCKPERMS_MANUAL_PLAYTEST.md). The local
+`run-playtest/` world, logs, LuckPerms JAR, H2 database and other runtime state
+are intentionally not versioned.
 
 ## Supported APIs
 
@@ -66,7 +74,8 @@ and the detailed compatibility reports.
 - AtlasHybridTestPlugin `0.1.0-alpha`: **FULL**
 - WelcomeMessage `1.0`: **FULL**
 - WarpPlugin `1.0`: **FULL**
-- LuckPerms `5.5.81`: **BLOCKED** (research/raw boot only; not supported)
+- LuckPerms Forge `5.4.46` bridges: **PARTIAL / PASS**
+- LuckPerms Bukkit `5.5.81`: **BLOCKED** (research/raw boot only; not supported)
 
 Unsupported linkage is reported under `[AtlasHybrid Compatibility]` with the
 plugin, missing symbol, `NOT_IMPLEMENTED` status and runtime version before the
