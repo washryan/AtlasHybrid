@@ -1,6 +1,6 @@
 # ADR-009: LuckPerms permission bridge
 
-Status: **Decision proposed; implementation deferred**
+Status: **Accepted; implementation blocked pending a supported upstream bootstrap contract**
 
 ## Context
 
@@ -192,6 +192,117 @@ LuckPerms delegate Player permission checks and public permission-registry
 semantics instead of installing CraftBukkit hooks. Until that exists, status
 remains **BLOCKED — ARCHITECTURAL DECISION**, not permanently incompatible.
 
+## Phase 9.22 supported-contract audit
+
+The exact LuckPerms 5.5.81 source at commit
+`32494e9f0ab14857b63650ab68a65222d1924a93` contains no supported contract that
+lets an external runtime replace or disable the Bukkit injectors. The abstract
+`setupPlatformHooks` method is an internal subclass hook used by the built-in
+platform modules, not a public extension point. `LPBukkitPlugin` implements it
+by directly constructing `InjectorSubscriptionMap`, `InjectorPermissionMap`,
+`InjectorDefaultsMap` and `PermissibleMonitoringInjector`. There is no injected
+factory, strategy interface, service loader, capability test or fallback branch.
+
+The three `apply-bukkit-*` settings control whether child, default and
+attachment data participates in calculation. They do not control injector
+construction, Player permissible replacement or API publication. Disabling
+them therefore does not make the Bukkit bootstrap supported on AtlasHybrid.
+
+The startup ordering remains decisive:
+
+```text
+context manager
+  -> setupPlatformHooks (current failure)
+  -> LuckPermsApiProvider construction
+  -> LuckPermsProvider registration
+  -> Bukkit ServicesManager registration
+  -> extension manager construction/loading
+  -> initial data load and final setup
+```
+
+`LuckPermsProvider#get()` consequently throws before the blocker, the Bukkit
+service does not exist, and extensions load too late. Extensions receive the
+already-created public API and can add post-bootstrap functionality; they
+cannot select the permission injector or platform backend.
+
+### Platform comparison
+
+| Platform artifact | Permission integration | Reusable by the Bukkit artifact? |
+|---|---|---|
+| Bukkit | private `SimplePluginManager` map replacement followed by private Player permissible replacement | No; hardcoded in `LPBukkitPlugin` |
+| Nukkit | analogous platform-specific map/permissible injectors | No |
+| Sponge | native Sponge permission service | No; Sponge types and lifecycle |
+| Fabric | Fabric permission API/event listeners; empty `setupPlatformHooks` | No; Fabric loader and Minecraft platform types |
+| Forge | native Forge permission-handler registration; empty `setupPlatformHooks` | No; separate mod bootstrap and Forge event lifecycle |
+| Velocity / Bungee | native proxy sender checks; empty `setupPlatformHooks` | No; proxy APIs and lifecycle |
+| Standalone | no server permission interception | No |
+
+The common module and `LuckPermsBootstrap` demonstrate a sound internal
+multi-platform architecture, but they are implementation packages
+(`me.lucko.luckperms.common`), not the semantically-versioned public API. A new
+external AtlasHybrid backend would need to assemble and maintain a complete
+LuckPerms distribution: bootstrap, dependency loader, sender/command/event
+adapters, context manager, permission interception and packaging. It would not
+be a small adapter to the original Bukkit JAR.
+
+LuckPerms has an official Forge implementation, and its historical commit
+`6e0e0e8a` targeted Minecraft 1.19.2 / Forge 43.0.3. That historical line is
+from the 5.4 series. At the audited 5.5.81 commit, the Forge artifact targets
+Minecraft 26.2 / Forge 65.0.0. Neither artifact is an interchangeable way to
+make the original Bukkit 5.5.81 JAR enable on AtlasHybrid 1.19.2. Evaluating an
+older Forge build would be a separate compatibility target with different UX
+and version provenance.
+
+### Prototype gate
+
+**NO:** the original LuckPerms Bukkit 5.5.81 JAR cannot complete `onEnable` and
+make `Player#hasPermission` authoritative on AtlasHybrid without at least one
+of the rejected mechanisms: a CraftBukkit-compatible private shape, private
+reflection, bytecode modification/instrumentation, or a change to LuckPerms.
+
+Because the public API is published only after the hardcoded blocker, a
+compile-only `compat-luckperms` module would never observe the service. Creating
+it in this phase would be dead code, so the Phase 9.22 prototype is deliberately
+not implemented.
+
+### Classloader and future bridge contract
+
+After a successful LuckPerms enable, an AtlasHybrid plugin declaring
+`depend: [LuckPerms]` can resolve the API from the dependency plugin
+classloader. The future adapter must use `compileOnly net.luckperms:api:5.5`
+and must not shade the API, otherwise `LuckPerms.class` service keys and API
+objects can have different class identities. This valid post-enable path does
+not solve the present bootstrap ordering.
+
+If upstream makes bootstrap externally selectable, the provider result mapping
+is:
+
+```text
+TRUE      -> allow
+FALSE     -> deny
+UNDEFINED -> abstain and continue AtlasHybrid fallback
+```
+
+The adapter must be Player-only initially, obtain contextual data through the
+public `PlayerAdapter`, register only while the LuckPerms service is live, and
+remove all owner-scoped state on disable/reload. Console and offline users
+remain outside the first bridge.
+
+### Final decision matrix
+
+| Strategy | Works with original 5.5.81? | Public APIs only? | Requires upstream? | Maintenance risk | Recommended |
+|---|---:|---:|---:|---|---:|
+| Bukkit JAR plus current supported hook | No hook exists | Yes | Yes | Low after an accepted contract | **Yes, target architecture** |
+| Post-enable public API provider adapter | No; service is never reached | Yes | Yes, to cross bootstrap | Low | **Yes, after upstream support** |
+| Complete external AtlasHybrid platform backend | No; replaces the artifact | No stable implementation SPI | No, but effectively maintains a distribution | High | No for 0.1.0-alpha |
+| Historical Forge 1.19.2 artifact plus Bukkit bridge | No; different 5.4 artifact and integration surface | Platform APIs are public, implementation is version-specific | No | High | Separate research only |
+| Fake `SimplePluginManager` / CraftBukkit state | Potentially | No | No | Extreme | **Rejected** |
+| Patch, Mixin or instrumentation | Potentially | No | No | Extreme | **Rejected** |
+
+The minimal acceptable next move is upstream cooperation. The proposed change
+is documented in
+[`LUCKPERMS_UPSTREAM_INTEGRATION_PROPOSAL.md`](LUCKPERMS_UPSTREAM_INTEGRATION_PROPOSAL.md).
+
 ## Rejected strategies
 
 - copying CraftBukkit or creating `org.bukkit.craftbukkit` classes;
@@ -206,21 +317,21 @@ remains **BLOCKED — ARCHITECTURAL DECISION**, not permanently incompatible.
 
 Proposed next phase:
 
-**FASE 9.22 — LuckPerms supported bootstrap contract and public API bridge
-prototype**
+**FASE 9.23 — LuckPerms upstream bootstrap contract consultation**
 
-1. specify the minimal generic AtlasHybrid platform capability exposed before
-   plugin enable;
-2. validate with LuckPerms maintainers/source whether it can be consumed through
-   a supported extension or upstream platform hook, without private reflection;
-3. prototype an isolated `compat-luckperms` module only if that supported entry
-   point exists;
-4. after API publication, obtain `LuckPerms` from `ServicesManager` and register
-   a Player-only `PermissionProvider`;
-5. stop if the only available bootstrap mechanism is patching or private-state
-   emulation.
+1. turn the local proposal into a concise maintainer-facing design packet with
+   the raw boot and exact-source evidence;
+2. request upstream feedback only with explicit user authorization;
+3. agree on capability ownership, pre-hook discovery, failure semantics and
+   classloader identity before writing implementation code;
+4. if upstream accepts the direction, prototype the smallest change in a
+   separate LuckPerms development branch with upstream tests;
+5. return to an AtlasHybrid `compat-luckperms` prototype only after that branch
+   publishes the API successfully without private AtlasHybrid compatibility
+   shapes.
 
-This phase must not silently implement a fork or patched artifact.
+This phase must not silently implement or distribute a fork, open an issue/PR,
+or patch the deployed plugin artifact.
 
 ## Testing plan
 

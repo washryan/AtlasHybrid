@@ -947,3 +947,27 @@ are in
 [`ADR-009-LUCKPERMS-PERMISSION-BRIDGE.md`](../architecture/ADR-009-LUCKPERMS-PERMISSION-BRIDGE.md).
 Status remains **BLOCKED — ARCHITECTURAL DECISION**, not permanently
 incompatible.
+
+## Phase 9.22 supported bootstrap result
+
+The prototype gate is **NO** for the unchanged Bukkit 5.5.81 JAR. The audited
+backend has no official injector strategy, factory, service-provider hook,
+capability branch or configuration mode for an external permission authority.
+`LuckPermsProvider`, Bukkit `ServicesManager` publication and the extension
+manager all occur after the failing `setupPlatformHooks` call. Extensions are
+therefore too late, and a post-enable public API adapter cannot bootstrap.
+
+Other official LuckPerms artifacts validate that permission interception is a
+platform responsibility, but they are complete platform implementations rather
+than pluggable Bukkit backends. Forge 1.19.2 existed in the 5.4 source history;
+the exact 5.5.81 Forge module targets Minecraft 26.2 and cannot be installed as
+the tested AtlasHybrid 1.19.2 target. Building a custom AtlasHybrid platform
+module would mean maintaining LuckPerms implementation internals and a separate
+distribution, not merely compiling against the public API.
+
+No `compat-luckperms` code was created because the service it would consume is
+never published. The recommended path is an upstream-supported Bukkit
+permission-platform contract, followed by a small public-API Player provider.
+The proposal is in
+[`LUCKPERMS_UPSTREAM_INTEGRATION_PROPOSAL.md`](../architecture/LUCKPERMS_UPSTREAM_INTEGRATION_PROPOSAL.md).
+Status remains **BLOCKED — ARCHITECTURAL DECISION**.

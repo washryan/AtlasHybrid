@@ -803,3 +803,46 @@ Architectural decision: public-API adapter preferred, contingent on an official
 LuckPerms bootstrap cooperation point; all private-shape and instrumentation
 approaches rejected. See
 [`ADR-009-LUCKPERMS-PERMISSION-BRIDGE.md`](../architecture/ADR-009-LUCKPERMS-PERMISSION-BRIDGE.md).
+
+## Phase 9.22 bootstrap-contract audit
+
+| Question | Exact 5.5.81 finding |
+|---|---|
+| Is `setupPlatformHooks` overridable? | Internally yes: it is a protected abstract method on `AbstractLuckPermsPlugin`. Externally no: the Bukkit bootstrap constructs `LPBukkitPlugin` directly and exposes no public plugin/backend factory. |
+| Injector construction | Hardcoded concrete construction in `LPBukkitPlugin`; no strategy, interface, factory, `ServiceLoader`, configuration gate or fallback. |
+| Official disable flag | None. `apply-bukkit-child-permissions`, `apply-bukkit-default-permissions` and `apply-bukkit-attachment-permissions` affect calculation only; injectors still run. |
+| Early public API | None. `LuckPermsProvider.register`, Bukkit service registration and extensions follow `setupPlatformHooks`. |
+| Extensions | Loaded from `extensions/*.jar` only after API publication; they receive the API and cannot alter bootstrap. |
+| Platform abstraction | `AbstractLuckPermsPlugin` / `LuckPermsBootstrap` support built-in platform modules but live in implementation packages, not the public semver API. |
+| Alternate backend | Forge/Fabric/Sponge/etc. are separate artifacts with platform-specific bootstrap, events, commands and permission integration; no backend can be inserted into the Bukkit artifact. |
+| Original Bukkit 5.5.81 gate | **NO**: it cannot complete enable correctly on AtlasHybrid under the prohibition on private shapes, reflection, patching and instrumentation. |
+
+The official Forge module demonstrates the desirable model: register a native
+Forge permission handler early and leave `setupPlatformHooks` empty. Its
+historical commit `6e0e0e8a` targeted Minecraft 1.19.2 / Forge 43.0.3, but that
+was a 5.4-era artifact. At exact 5.5.81 the module targets Minecraft 26.2 /
+Forge 65.0.0. Backporting or authoring a new platform artifact is technically
+possible under the MIT license, but it uses LuckPerms implementation modules,
+is not covered by public API compatibility guarantees, and is not a solution
+for the original Bukkit JAR.
+
+The public API dependency itself is explicitly supported as
+`compileOnly net.luckperms:api:5.5`. An external adapter may be separately
+distributed and may compile against that API. MIT also permits creating a
+platform module or distributing modified code if the copyright and permission
+notice is retained in copies or substantial portions. No LuckPerms code or JAR
+was incorporated in AtlasHybrid during this audit.
+
+Future public bridge contract after a successful bootstrap:
+
+```text
+TRUE      -> Optional.of(true)
+FALSE     -> Optional.of(false)
+UNDEFINED -> Optional.empty()
+```
+
+The provider must resolve only live Players, use LuckPerms' public
+`PlayerAdapter` for context correctness, abstain for console/offline subjects,
+and unregister when the service/plugin disappears. AtlasHybrid's dependency
+classloader can expose the LuckPerms API from a declared plugin dependency; the
+adapter must not shade a second API copy.
