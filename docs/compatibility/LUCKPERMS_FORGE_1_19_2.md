@@ -2,13 +2,13 @@
 
 ## Result
 
-**RESEARCH / POC — FEASIBLE.** The official, unchanged LuckPerms Forge
+**PARTIAL / PASS — PLAYER PERMISSION QUERY BRIDGE.** The official, unchanged LuckPerms Forge
 `5.4.46` artifact completes enable on Minecraft `1.19.2`, Forge `43.5.0` and
 Java 17 beside AtlasHybrid `0.1.0-alpha`.
 
-This is not a Bukkit bridge or a support claim. LuckPerms Bukkit `5.5.81`
-remains **BLOCKED** at its CraftBukkit-specific platform hooks. No LuckPerms
-artifact is tracked or bundled.
+The supported scope is the Atlas `Player#hasPermission` query bridge described
+below. LuckPerms Bukkit `5.5.81` remains **BLOCKED** at its CraftBukkit-specific
+platform hooks. No LuckPerms artifact is tracked or bundled.
 
 ## Exact artifact
 
@@ -137,9 +137,9 @@ server or non-daemon LuckPerms thread retained the process.
 
 ## Status
 
-The Forge backend feasibility gate passes. The next phase may design a small,
-optional public-API bridge, but `FULL` or `PARTIAL` compatibility is not claimed
-until Bukkit permission behavior and lifecycle are implemented and tested.
+The Forge backend feasibility gate and the Phase 9.24B Player permission-query
+bridge pass. Compatibility is `PARTIAL` because Bukkit service/plugin identity,
+dependency resolution and Vault remain outside this bridge.
 
 ## Atlas regression and reproducibility
 
@@ -158,3 +158,61 @@ scheduler and clean shutdown. The only `ERROR` was the deliberate failed-enable
 fixture and was followed by `FAILED_ENABLE_ROLLBACK_OK`. `git diff --check`
 passed. No LuckPerms Bukkit JAR was active and the only tracked JAR remained the
 Gradle wrapper.
+
+## Phase 9.24B permission bridge
+
+AtlasHybrid now contains an optional compatibility bridge compiled only against
+the official `net.luckperms:api:5.4` artifact. The API is not bundled into the
+Atlas runtime. `ModList` gates bridge construction, so Atlas boots unchanged
+when the LuckPerms mod is absent.
+
+At `ServerStartedEvent`, after LuckPerms Forge has published its public API, the
+bridge moves through `DISCOVERED` to `BOUND` and registers one system-owned
+provider at `HIGHEST`. It checks the public provider identity on server ticks so
+an unavailable or replaced API is removed/rebound without retaining the old
+instance. Shutdown unregisters the provider before Bukkit plugins are disabled.
+
+The query path is public API only:
+
+```text
+Bukkit Player#hasPermission(node)
+  -> AtlasPermissible
+  -> PermissionProviderRegistry
+  -> UserManager#getUser(player UUID)
+  -> ContextManager#getQueryOptions(loaded User)
+  -> User#getCachedData#getPermissionData(QueryOptions)
+  -> checkPermission(node)
+```
+
+Only online, already-loaded Player subjects are supported. A missing User or
+missing live `QueryOptions` abstains; the bridge never synchronously loads
+storage and never fabricates context. Mapping is `TRUE -> true`, `FALSE ->
+false`, and `UNDEFINED -> abstain`.
+
+Precedence is intentional: explicit Atlas/Bukkit attachments are evaluated
+first, LuckPerms TRUE/FALSE next, and Atlas registered permissions/defaults
+last. The Forge backend cannot see Bukkit attachments, so attachment-first is
+required to preserve their documented behavior. LuckPerms FALSE remains an
+authoritative denial over the Atlas core/default fallback.
+
+The production Forge 43.5.0 proof used the original artifact hash recorded
+above and the Bukkit-facing `/atlaspermcheck` probe. It observed:
+
+```text
+UNDEFINED -> Atlas TRUE default
+LuckPerms TRUE -> true
+LuckPerms FALSE -> false (overrides Atlas TRUE default)
+remove -> Atlas TRUE default
+gamemode=survival -> true
+gamemode=creative -> false
+```
+
+Repeated logout/relogin used the same UUID without Atlas retaining a Player or
+User reference. `lp reloadconfig` kept the public API identity valid. Normal
+stop logged provider removal, plugin disable, LuckPerms H2 close and process
+exit with no remaining server process.
+
+This status is deliberately scoped. It does not expose `LuckPerms.class` in the
+Bukkit `ServicesManager`, create a Bukkit plugin identity, satisfy
+`depend: [LuckPerms]`, supply a Bukkit `PlayerAdapter`, implement Vault, or
+claim Bukkit permission registry/subscription parity.

@@ -213,6 +213,17 @@ class PermissionCoreTest {
         assertFalse(subject.hasPermission("example.node"));
     }
 
+    @Test void systemProviderHasExplicitNonPluginOwnershipAndCanBeRemoved() {
+        PermissionProvider provider = (ignored, node) -> Optional.of(true);
+        PermissionProviderRegistry.Registration registration = providers.registerSystem(
+            "External permission system", provider, PermissionProviderPriority.HIGHEST);
+        assertNull(registration.owner());
+        assertEquals("External permission system", registration.ownerName());
+        assertTrue(subject(false).hasPermission("example.node"));
+        providers.unregister(provider);
+        assertFalse(subject(false).hasPermission("example.node"));
+    }
+
     @Test void failedProviderIsLoggedAndFallsBack() {
         AtomicInteger severe = new AtomicInteger();
         logger.addHandler(new Handler() {

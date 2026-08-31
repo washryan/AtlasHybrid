@@ -9,3 +9,5 @@ softdepend: []
 commands:
   atlas:
     description: Shows AtlasHybrid status.
+  atlaspermcheck:
+    description: Checks one permission through Bukkit Player hasPermission.

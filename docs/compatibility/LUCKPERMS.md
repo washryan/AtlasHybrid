@@ -988,3 +988,18 @@ JVM. This is **RESEARCH / POC**, not `PARTIAL` or `FULL`, because no
 
 See [`LUCKPERMS_FORGE_1_19_2.md`](LUCKPERMS_FORGE_1_19_2.md) and
 [`LUCKPERMS_FORGE_BRIDGE_FEASIBILITY.md`](../architecture/LUCKPERMS_FORGE_BRIDGE_FEASIBILITY.md).
+
+## Phase 9.24B Forge permission bridge result
+
+The Bukkit `5.5.81` status remains **BLOCKED**. Separately, AtlasHybrid now has
+a `PARTIAL / PASS` bridge for the official LuckPerms Forge `5.4.46` backend.
+Using only `net.luckperms.api`, it delegates online Bukkit Player permission
+queries by UUID and live `QueryOptions`; TRUE and FALSE are authoritative, while
+UNDEFINED returns to Atlas defaults. A real Forge server proof covered negative
+nodes, removal/fallback, survival/creative context changes, reconnect,
+`reloadconfig` and clean unregistration/shutdown.
+
+No Bukkit LuckPerms service, plugin identity, hard dependency, Vault adapter,
+private reflection, CraftBukkit type, Mixin or external JAR was added. Full
+scope and limitations are recorded in
+[`LUCKPERMS_FORGE_PERMISSION_BRIDGE.md`](../architecture/LUCKPERMS_FORGE_PERMISSION_BRIDGE.md).

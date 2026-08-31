@@ -81,6 +81,10 @@ public final class AtlasHybridTestPlugin extends JavaPlugin implements Listener,
             throw new IllegalStateException("Atlas command was not created from plugin.yml");
         }
         getCommand("atlas").setExecutor(this);
+        if (getCommand("atlaspermcheck") == null) {
+            throw new IllegalStateException("Atlas permission-check command was not created from plugin.yml");
+        }
+        getCommand("atlaspermcheck").setExecutor(this);
         getServer().getPluginManager().registerEvents(this, this);
         java.util.concurrent.atomic.AtomicInteger executorCalls = new java.util.concurrent.atomic.AtomicInteger();
         Listener executorListener = new Listener() { };
@@ -111,6 +115,17 @@ public final class AtlasHybridTestPlugin extends JavaPlugin implements Listener,
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
+        if (command.getName().equals("atlaspermcheck")) {
+            if (!(sender instanceof org.bukkit.entity.Player player) || args.length != 1) {
+                sender.sendMessage("Usage: /atlaspermcheck <node> (player only)");
+                return true;
+            }
+            boolean value = player.hasPermission(args[0]);
+            sender.sendMessage("Bukkit hasPermission(" + args[0] + ") = " + value);
+            getLogger().info("[AtlasLuckPermsBridgeProof] player=" + player.getName()
+                + " node=" + args[0] + " result=" + value);
+            return true;
+        }
         if (args.length == 0) {
             sender.sendMessage("AtlasHybrid is running.");
             return true;
@@ -427,6 +442,7 @@ public final class AtlasHybridTestPlugin extends JavaPlugin implements Listener,
 
     private void registerPermissionProof() {
         getServer().getPluginManager().addPermission(new Permission("atlas.test.console", PermissionDefault.OP));
+        getServer().getPluginManager().addPermission(new Permission("atlas.bridge.test", PermissionDefault.TRUE));
         AtlasPermissions.providers().register(this,
             (subject, node) -> node.equals("atlas.test.provider") ? Optional.of(true) : Optional.empty(),
             PermissionProviderPriority.NORMAL);

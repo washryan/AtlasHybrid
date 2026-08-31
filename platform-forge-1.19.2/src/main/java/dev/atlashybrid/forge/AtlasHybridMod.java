@@ -6,6 +6,7 @@ import com.mojang.brigadier.suggestion.Suggestions;
 import com.mojang.brigadier.suggestion.SuggestionsBuilder;
 import dev.atlashybrid.diagnostics.CompatibilityCollector;
 import dev.atlashybrid.diagnostics.CompatibilityRuntime;
+import dev.atlashybrid.forge.compat.luckperms.LuckPermsForgePermissionBridge;
 import dev.atlashybrid.loader.DependencyResolutionException;
 import dev.atlashybrid.loader.PluginRuntime;
 import dev.atlashybrid.runtime.command.CommandRegistry;
@@ -40,6 +41,7 @@ import net.minecraftforge.event.server.ServerStoppingEvent;
 import net.minecraftforge.event.server.ServerStartingEvent;
 import net.minecraftforge.eventbus.api.EventPriority;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraftforge.fml.ModList;
 import net.minecraftforge.fml.common.Mod;
 import org.bukkit.Bukkit;
 import org.bukkit.event.block.BlockBreakEvent;
@@ -68,6 +70,7 @@ public final class AtlasHybridMod {
     private AtlasPermissionRegistry permissionRegistry;
     private PermissionProviderRegistry permissionProviders;
     private AtlasServicesManager servicesManager;
+    private LuckPermsForgePermissionBridge luckPermsBridge;
 
     public AtlasHybridMod() {
         configureLogging();
@@ -153,6 +156,17 @@ public final class AtlasHybridMod {
 
     @SubscribeEvent
     public void onServerStarted(ServerStartedEvent event) {
+        if (ModList.get().isLoaded("luckperms")) {
+            try {
+                luckPermsBridge = new LuckPermsForgePermissionBridge(permissionProviders, LOGGER);
+                luckPermsBridge.refresh();
+            } catch (RuntimeException | LinkageError failure) {
+                LOGGER.log(Level.WARNING,
+                    "[AtlasHybrid LuckPerms] Optional public API bridge unavailable; Atlas fallback remains active",
+                    failure);
+                luckPermsBridge = null;
+            }
+        }
         pluginRuntime.enableAll();
         LOGGER.info("[AtlasHybrid] " + pluginRuntime.loadedCount() + " plugin(s) loaded and enable phase completed");
         LOGGER.info("[AtlasHybrid Compatibility]\n"
@@ -241,7 +255,9 @@ public final class AtlasHybridMod {
 
     @SubscribeEvent
     public void onServerTick(TickEvent.ServerTickEvent event) {
-        if (event.phase == TickEvent.Phase.END && scheduler != null) scheduler.tick();
+        if (event.phase != TickEvent.Phase.END) return;
+        if (luckPermsBridge != null) luckPermsBridge.refresh();
+        if (scheduler != null) scheduler.tick();
     }
 
     @SubscribeEvent(priority = EventPriority.HIGHEST)
@@ -402,6 +418,7 @@ public final class AtlasHybridMod {
 
     @SubscribeEvent
     public void onServerStopping(ServerStoppingEvent event) {
+        if (luckPermsBridge != null) luckPermsBridge.close();
         if (pluginRuntime != null) {
             pluginRuntime.disableAll();
             LOGGER.info("[AtlasHybrid Permission] lifecycle cleanup providers=" + serverAdapter.permissionProviderCount()
@@ -428,5 +445,6 @@ public final class AtlasHybridMod {
         permissionRegistry = null;
         permissionProviders = null;
         servicesManager = null;
+        luckPermsBridge = null;
     }
 }

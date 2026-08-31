@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.BooleanSupplier;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import org.bukkit.permissions.Permission;
@@ -28,7 +29,26 @@ public final class PermissionProviderRegistry {
         Objects.requireNonNull(owner, "owner");
         Objects.requireNonNull(provider, "provider");
         Objects.requireNonNull(priority, "priority");
-        Registration registration = new Registration(owner, provider, priority, sequence.incrementAndGet());
+        Registration registration = new Registration(owner, owner.getName(), owner::isEnabled,
+            provider, priority, sequence.incrementAndGet());
+        return register(registration);
+    }
+
+    public synchronized Registration registerSystem(
+        String ownerName,
+        PermissionProvider provider,
+        PermissionProviderPriority priority
+    ) {
+        Objects.requireNonNull(ownerName, "ownerName");
+        Objects.requireNonNull(provider, "provider");
+        Objects.requireNonNull(priority, "priority");
+        if (ownerName.isBlank()) throw new IllegalArgumentException("ownerName cannot be blank");
+        Registration registration = new Registration(null, ownerName, () -> true,
+            provider, priority, sequence.incrementAndGet());
+        return register(registration);
+    }
+
+    private Registration register(Registration registration) {
         ArrayList<Registration> next = new ArrayList<>(registrations);
         next.add(registration);
         next.sort(ORDER);
@@ -47,13 +67,13 @@ public final class PermissionProviderRegistry {
     public Optional<Boolean> query(PermissionSubject subject, String permission) {
         String normalized = Permission.normalize(permission);
         for (Registration registration : registrations) {
-            if (!registration.owner().isEnabled()) continue;
+            if (!registration.active().getAsBoolean()) continue;
             try {
                 Optional<Boolean> result = registration.provider().query(subject, normalized);
                 if (result != null && result.isPresent()) return result;
             } catch (Throwable throwable) {
                 logger.log(Level.SEVERE,
-                    "Permission provider owned by " + registration.owner().getName()
+                    "Permission provider owned by " + registration.ownerName()
                         + " failed querying " + normalized + "; falling back to the next provider/core",
                     throwable);
             }
@@ -64,9 +84,17 @@ public final class PermissionProviderRegistry {
     public int size() { return registrations.size(); }
     public List<Registration> registrations() { return registrations; }
 
-    public record Registration(Plugin owner, PermissionProvider provider, PermissionProviderPriority priority, long sequence) {
+    public record Registration(
+        Plugin owner,
+        String ownerName,
+        BooleanSupplier active,
+        PermissionProvider provider,
+        PermissionProviderPriority priority,
+        long sequence
+    ) {
         public Registration {
-            Objects.requireNonNull(owner, "owner");
+            Objects.requireNonNull(ownerName, "ownerName");
+            Objects.requireNonNull(active, "active");
             Objects.requireNonNull(provider, "provider");
             Objects.requireNonNull(priority, "priority");
         }
