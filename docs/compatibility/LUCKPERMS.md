@@ -921,3 +921,29 @@ dimension and removed the Server thread. Plugin resources remained because the
 partial LuckPerms shutdown was incomplete; the non-daemon OkHttp writer retained
 the JVM. The launcher was interrupted only after server shutdown, and no Forge
 server process remained.
+
+## Phase 9.21 architectural decision
+
+The full 5.5.81 source audit confirms that context manager, listeners, commands
+and storage are complete before the blocker. `setupPlatformHooks` then replaces
+the private `SimplePluginManager` fields `permSubs`, `permissions` and
+`defaultPerms`; a separate optional workaround touches `dependencyGraph`.
+Player login later replaces private `CraftHumanEntity#perm`. The stock Bukkit
+backend has no supported configuration flag that disables these hooks while
+preserving permission correctness, and injection failure has no Player fallback.
+
+The official API provides the correct contextual query through
+`LuckPerms#getPlayerAdapter(Player.class)`, `getPermissionData(player)` and
+`checkPermission(node)`. AtlasHybrid's existing `PermissionProvider` can carry
+that result without replacing Player state. However, the LuckPerms API singleton
+and Bukkit service are both published only after `setupPlatformHooks`, producing
+a bootstrap chicken-and-egg for the unchanged 5.5.81 Bukkit artifact.
+
+Decision: reject a fake `SimplePluginManager`, private-field emulation,
+CraftPlayer/CraftBukkit shapes, reflection bypasses and instrumentation. An
+isolated public-API LuckPerms provider adapter is acceptable only with a
+supported bootstrap/platform cooperation point. Details and Phase 9.22 proposal
+are in
+[`ADR-009-LUCKPERMS-PERMISSION-BRIDGE.md`](../architecture/ADR-009-LUCKPERMS-PERMISSION-BRIDGE.md).
+Status remains **BLOCKED — ARCHITECTURAL DECISION**, not permanently
+incompatible.

@@ -774,3 +774,32 @@ OkHttp threads, one Okio watchdog and one MVStore writer. One OkHttp metadata
 writer was non-daemon. Minecraft shutdown completed and saved all worlds, but
 the partial plugin resources retained the JVM until the launcher was
 interrupted. No server process remained.
+
+## Phase 9.21 platform-hook architecture audit
+
+| Surface | Exact behavior | Classification |
+|---|---|---|
+| `SimplePluginManager#permSubs` | replaced by a map that dynamically includes permitted online Players in subscription queries | private CraftBukkit strategy; public subscription correctness is relevant |
+| `SimplePluginManager#permissions` | replaced to observe permission registration/children and invalidate LuckPerms calculators | private strategy supporting required default/child semantics |
+| `SimplePluginManager#defaultPerms` | replaced to cache op/non-op Bukkit defaults | private strategy supporting configured default semantics |
+| `SimplePluginManager#dependencyGraph` | adds LuckPerms-to-Vault edge | optional load-order warning workaround |
+| `CraftHumanEntity#perm` | replaced with `LuckPermsPermissible` at LOWEST login and reload setup | required interception strategy for stock Bukkit backend; no fallback |
+| console/entity permissible fields | wrapped for verbose monitoring | optional; failures ignored |
+
+The public permission query is sufficient after API registration:
+`LuckPerms#getPlayerAdapter(Player.class)` -> `getPermissionData(player)` ->
+`CachedPermissionData#checkPermission(node)`. It uses the registered context
+manager and loaded User. The API is registered through both
+`LuckPermsProvider` and `ServicesManager` only after platform hooks, so raw boot
+#20 cannot obtain it before the current failure.
+
+AtlasHybrid's SPI is sufficient for synchronous online Player queries and clean
+owner lifecycle. It should abstain for console/other subjects. FULL Bukkit
+semantics may later require a generic provider-aware subscription/default-child
+design, but public subscriptions alone do not unblock the stock plugin because
+5.5.81 directly installs private replacement maps.
+
+Architectural decision: public-API adapter preferred, contingent on an official
+LuckPerms bootstrap cooperation point; all private-shape and instrumentation
+approaches rejected. See
+[`ADR-009-LUCKPERMS-PERMISSION-BRIDGE.md`](../architecture/ADR-009-LUCKPERMS-PERMISSION-BRIDGE.md).
