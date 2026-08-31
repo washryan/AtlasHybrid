@@ -8,9 +8,10 @@ The bridge lives in the Forge compatibility area and uses only the published
 `net.luckperms.api` contract. It neither changes LuckPerms nor emulates
 CraftBukkit.
 
-This is intentionally a `PARTIAL / PASS` capability. Bukkit service discovery,
-plugin identity/dependency satisfaction, Bukkit `PlayerAdapter`, Vault and
-permission subscription parity are separate problems.
+This is intentionally a `PARTIAL / PASS` capability. Phase 9.24C adds public
+Bukkit service discovery as a separate bridge; plugin identity/dependency
+satisfaction, Bukkit `PlayerAdapter`, Vault and permission subscription parity
+remain separate problems.
 
 ## Dependency and discovery
 
@@ -19,7 +20,8 @@ copied into the Atlas artifact. `ModList#isLoaded("luckperms")` gates creation
 of the compatibility class. An Atlas-only production boot proves that the core
 runtime has no hard LuckPerms classloading dependency.
 
-Discovery states are `ABSENT`, `DISCOVERED`, `BOUND`, `UNBOUND` and `FAILED`.
+Discovery states are `ABSENT`, `DISCOVERED`, `PERMISSION_PROVIDER_BOUND`,
+`BUKKIT_SERVICE_REGISTERED`, `SERVICE_UNREGISTERED` and `FAILED`.
 An installed mod starts as discovered. At `ServerStartedEvent`, the bridge calls
 the public `LuckPermsProvider#get()` and registers only after that API exists.
 Normal absence is silent. Unexpected API/linkage failures warn once and retain
@@ -97,7 +99,7 @@ events, scheduler, block-break cancellation and shutdown.
 
 ## Explicit non-goals
 
-- no Bukkit `ServicesManager` registration for `LuckPerms.class`;
+- no Bukkit plugin identity associated with the `LuckPerms.class` service;
 - no fake `PluginManager#getPlugin("LuckPerms")` result;
 - no satisfaction of `depend: [LuckPerms]`;
 - no Vault bridge;

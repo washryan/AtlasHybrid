@@ -7,6 +7,7 @@ sourceSets {
 dependencies {
     compileOnly project(':bukkit-api')
     compileOnly project(':runtime-core')
+    compileOnly 'net.luckperms:api:5.4'
     failedEnableCompileOnly project(':bukkit-api')
     failedEnableCompileOnly project(':runtime-core')
 }

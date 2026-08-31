@@ -95,6 +95,9 @@ public final class AtlasHybridTestPlugin extends JavaPlugin implements Listener,
             throw new IllegalStateException("EventExecutor integration proof failed");
         }
         getLogger().info("[AtlasHybridIntegration] EVENT_EXECUTOR_OK");
+        if (hasLuckPermsService()) {
+            LuckPermsServicesProof.verifyRegistration(getServer(), getLogger());
+        }
         registerPermissionProof();
         long delay = getConfig().getInt("scheduler-delay-ticks", 20);
         getServer().getScheduler().runTaskLater(this,
@@ -124,6 +127,9 @@ public final class AtlasHybridTestPlugin extends JavaPlugin implements Listener,
             sender.sendMessage("Bukkit hasPermission(" + args[0] + ") = " + value);
             getLogger().info("[AtlasLuckPermsBridgeProof] player=" + player.getName()
                 + " node=" + args[0] + " result=" + value);
+            if (hasLuckPermsService()) {
+                LuckPermsServicesProof.verifyPlayerQuery(getServer(), player, args[0], getLogger());
+            }
             return true;
         }
         if (args.length == 0) {
@@ -233,6 +239,10 @@ public final class AtlasHybridTestPlugin extends JavaPlugin implements Listener,
         getLogger().info("[AtlasHybridPermissionProof] attachmentTrue=" + attachmentTrue
             + " attachmentFalse=" + attachmentFalse + " provider=" + provider
             + " console=" + console + " service=" + service);
+        if (hasLuckPermsService()) {
+            LuckPermsServicesProof.verifyPlayerQuery(
+                getServer(), event.getPlayer(), "atlas.bridge.test", getLogger());
+        }
         Location before = event.getPlayer().getLocation();
         Location target = new Location(before.getWorld(), before.getX() + 0.25D, before.getY(), before.getZ(), before.getYaw(), before.getPitch());
         boolean teleported = event.getPlayer().teleport(target);
@@ -448,6 +458,11 @@ public final class AtlasHybridTestPlugin extends JavaPlugin implements Listener,
             PermissionProviderPriority.NORMAL);
         getServer().getServicesManager().register(PermissionProofService.class,
             () -> "ready", this, ServicePriority.Normal);
+    }
+
+    private boolean hasLuckPermsService() {
+        return getServer().getServicesManager().getKnownServices().stream()
+            .anyMatch(service -> service.getName().equals("net.luckperms.api.LuckPerms"));
     }
 
     private void appendLoginStage(String name, String stage) {

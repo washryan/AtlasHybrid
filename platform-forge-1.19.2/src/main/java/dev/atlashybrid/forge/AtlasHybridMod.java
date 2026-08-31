@@ -7,6 +7,7 @@ import com.mojang.brigadier.suggestion.SuggestionsBuilder;
 import dev.atlashybrid.diagnostics.CompatibilityCollector;
 import dev.atlashybrid.diagnostics.CompatibilityRuntime;
 import dev.atlashybrid.forge.compat.luckperms.LuckPermsForgePermissionBridge;
+import dev.atlashybrid.forge.compat.AtlasCompatibilityServiceOwner;
 import dev.atlashybrid.loader.DependencyResolutionException;
 import dev.atlashybrid.loader.PluginRuntime;
 import dev.atlashybrid.runtime.command.CommandRegistry;
@@ -71,6 +72,7 @@ public final class AtlasHybridMod {
     private PermissionProviderRegistry permissionProviders;
     private AtlasServicesManager servicesManager;
     private LuckPermsForgePermissionBridge luckPermsBridge;
+    private AtlasCompatibilityServiceOwner compatibilityServiceOwner;
 
     public AtlasHybridMod() {
         configureLogging();
@@ -115,6 +117,8 @@ public final class AtlasHybridMod {
         serverAdapter = new ForgeServerAdapter(event.getServer(), pluginManager, scheduler, commands,
             permissionRegistry, permissionProviders, servicesManager);
         Bukkit.setServer(serverAdapter);
+        compatibilityServiceOwner = new AtlasCompatibilityServiceOwner(
+            serverAdapter, LOGGER, Path.of("config", "atlashybrid", "compatibility").toFile());
         serverAdapter.initializePermissions();
         LoginAdmissionBridge.install(new LoginAdmissionBridge.AdmissionHandler() {
             @Override
@@ -158,7 +162,8 @@ public final class AtlasHybridMod {
     public void onServerStarted(ServerStartedEvent event) {
         if (ModList.get().isLoaded("luckperms")) {
             try {
-                luckPermsBridge = new LuckPermsForgePermissionBridge(permissionProviders, LOGGER);
+                luckPermsBridge = new LuckPermsForgePermissionBridge(
+                    permissionProviders, servicesManager, compatibilityServiceOwner, LOGGER);
                 luckPermsBridge.refresh();
             } catch (RuntimeException | LinkageError failure) {
                 LOGGER.log(Level.WARNING,
@@ -419,6 +424,10 @@ public final class AtlasHybridMod {
     @SubscribeEvent
     public void onServerStopping(ServerStoppingEvent event) {
         if (luckPermsBridge != null) luckPermsBridge.close();
+        if (compatibilityServiceOwner != null) {
+            servicesManager.unregisterAll(compatibilityServiceOwner);
+            compatibilityServiceOwner.close();
+        }
         if (pluginRuntime != null) {
             pluginRuntime.disableAll();
             LOGGER.info("[AtlasHybrid Permission] lifecycle cleanup providers=" + serverAdapter.permissionProviderCount()
@@ -446,5 +455,6 @@ public final class AtlasHybridMod {
         permissionProviders = null;
         servicesManager = null;
         luckPermsBridge = null;
+        compatibilityServiceOwner = null;
     }
 }

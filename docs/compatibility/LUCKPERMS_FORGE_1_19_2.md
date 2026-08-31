@@ -122,10 +122,9 @@ contexts manually when the online native subject is available.
 - A Bukkit `depend: [LuckPerms]` currently fails Atlas plugin dependency
   resolution because only Bukkit plugin candidates satisfy hard dependencies.
 - `PluginManager#getPlugin("LuckPerms")` returns no plugin.
-- Forge LuckPerms does not publish itself in the Bukkit `ServicesManager`.
-- Registering the already parent-visible public API instance in that manager is
-  technically possible, but is **CONDITIONAL** on a reviewed owner/lifecycle
-  bridge and was not implemented.
+- Forge LuckPerms does not publish itself in the Bukkit `ServicesManager`, but
+  the Phase 9.24C Atlas bridge publishes the same public instance there under
+  the internal `AtlasHybridCompatibility` service owner.
 - Vault integration is not supplied by the Forge backend and remains a separate
   problem.
 
@@ -137,9 +136,10 @@ server or non-daemon LuckPerms thread retained the process.
 
 ## Status
 
-The Forge backend feasibility gate and the Phase 9.24B Player permission-query
-bridge pass. Compatibility is `PARTIAL` because Bukkit service/plugin identity,
-dependency resolution and Vault remain outside this bridge.
+The Forge backend feasibility gate, the Phase 9.24B Player permission-query
+bridge and the Phase 9.24C public service bridge pass. Compatibility is
+`PARTIAL` because Bukkit plugin identity, hard dependency resolution, Bukkit
+PlayerAdapter and Vault remain outside these bridges.
 
 ## Atlas regression and reproducibility
 
@@ -212,7 +212,28 @@ User reference. `lp reloadconfig` kept the public API identity valid. Normal
 stop logged provider removal, plugin disable, LuckPerms H2 close and process
 exit with no remaining server process.
 
-This status is deliberately scoped. It does not expose `LuckPerms.class` in the
-Bukkit `ServicesManager`, create a Bukkit plugin identity, satisfy
-`depend: [LuckPerms]`, supply a Bukkit `PlayerAdapter`, implement Vault, or
-claim Bukkit permission registry/subscription parity.
+## Phase 9.24C Bukkit ServicesManager bridge
+
+Atlas now exposes the exact Forge API instance at
+`Bukkit.getServicesManager().load(LuckPerms.class)`. The service is registered
+once at `ServicePriority.Normal` under the internal Atlas-owned
+`AtlasHybridCompatibility` owner; that owner is not a LuckPerms Plugin and is
+not registered with PluginManager.
+
+The Java 17 production proof verified API version `5.4.46`, shared class
+identity, direct instance identity with `LuckPermsProvider.get()`, one
+registration, UserManager, online User, primary group, cached data and live
+QueryOptions. ServicesManager API queries and `Player#hasPermission` agreed for
+TRUE and FALSE; UNDEFINED correctly continued to Atlas fallback. The contextual
+API path observed `world`, `dimension-type` and `gamemode`, including a
+`gamemode=creative` FALSE result.
+
+`lp reloadconfig` preserved a valid service. Shutdown removed the service and
+permission provider before LuckPerms closed H2, leaving zero Atlas providers
+and services. Restart registered exactly one fresh service. The Atlas-only boot
+remained unchanged when LuckPerms was absent.
+
+This status is deliberately scoped. It does not create a Bukkit plugin
+identity, satisfy `depend: [LuckPerms]`, supply a Bukkit `PlayerAdapter`,
+implement Vault, or claim Bukkit permission registry/subscription parity. See
+[`LUCKPERMS_FORGE_SERVICES_BRIDGE.md`](../architecture/LUCKPERMS_FORGE_SERVICES_BRIDGE.md).
