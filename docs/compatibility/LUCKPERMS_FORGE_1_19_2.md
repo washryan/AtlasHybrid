@@ -262,3 +262,25 @@ LuckPerms plugin identity, Bukkit PlayerAdapter, Vault and full registry or
 subscription parity remain unsupported. See
 [`LUCKPERMS_FORGE_VIRTUAL_DEPENDENCY.md`](../architecture/LUCKPERMS_FORGE_VIRTUAL_DEPENDENCY.md)
 and [`VIRTUAL_PLUGIN_DEPENDENCIES.md`](../architecture/VIRTUAL_PLUGIN_DEPENDENCIES.md).
+
+## Phase 9.25 real-world matrix
+
+Five unchanged open-source Bukkit artifacts were source-audited and raw-booted
+in isolated production Forge profiles. The current LuckPerms bridges did not
+produce a single first blocker: three original hard dependencies resolved, and
+ExtraContexts obtained the public service, enabled, registered a calculator,
+reloaded and stopped cleanly.
+
+The actual first blockers were general Bukkit compatibility: LPC requires
+`AsyncPlayerChatEvent`; LuckPermsGUI and Vault independently require
+configuration `addDefault` semantics. TAB fails earlier on CraftBukkit package
+parsing and NMS. Only TAB used real LuckPerms plugin identity for feature
+detection, and its earlier architectural failure means this sample does not
+justify a fake Bukkit LuckPerms Plugin. LPC's Bukkit `PlayerAdapter` path was
+source-confirmed but not reached after its event blocker.
+
+The scoped integration therefore remains **PARTIAL / PASS**. Phase 9.26 should
+first address the shared generic configuration-defaults contract, not Vault,
+fake plugin identity or a speculative PlayerAdapter. Full provenance, hashes,
+source audit, raw results and the decision gate are in
+[`LUCKPERMS_REAL_WORLD_MATRIX.md`](LUCKPERMS_REAL_WORLD_MATRIX.md).
